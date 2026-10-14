@@ -50,7 +50,7 @@ Prioritize verified usefulness over polishing an empty AI dashboard. Tasks are d
 
 ## Gate 4 — Extension and contribution lifecycle
 
-- [x] Manifest V3 browser extension scaffold with an issue-page badge (current capabilities: see `extension/README.md`).
+- [x] Manifest V3 browser extension with live Contributor score badge on GitHub issue pages (api.github.com, anonymous, no auth required; see `extension/README.md`).
 - [ ] WXT browser extension displays match reasoning on GitHub pages.
 - [x] Static cost-free deployment certification (`npm run verify:deploy`).
 - [ ] Watchlist, stale issue detection, notifications, follow-up tracking.
