@@ -5,6 +5,8 @@ import { createGitHubClient } from './lib/github.mjs';
 const directClient = createGitHubClient();
 let proxyClient = null;
 let proxyNote = '';
+// Stays true for the page's life once sign-in is confirmed, even if proxyClient is cleared after a proxy failure.
+let signedIn = false;
 const form = document.querySelector('#search-form');
 const resultRoot = document.querySelector('#results');
 const status = document.querySelector('#status');
@@ -261,10 +263,29 @@ form.addEventListener('submit', async event => {
     lastResults = { items, p }; viewingSaved = false; renderView();
     try { if (form.elements.remember.checked) localStorage.setItem('contributor:preferences:v1', JSON.stringify(p)); else localStorage.removeItem('contributor:preferences:v1'); } catch {}
   } catch (err) {
-    status.textContent = `Search unavailable: ${err instanceof Error ? err.message : 'Unknown error'}. Try again later or use GitHub Search directly.`;
-    resultRoot.innerHTML = `<div class="empty"><a href="https://github.com/search?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22&type=issues" target="_blank" rel="noopener noreferrer">Continue searching on GitHub ↗</a></div>`;
+    const fallback = `<div class="empty"><a href="https://github.com/search?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22&type=issues" target="_blank" rel="noopener noreferrer">Continue searching on GitHub ↗</a></div>`;
+    if (err?.status === 403 || err?.status === 429) {
+      // Rate limited. Anonymous users get a sign-in nudge (5,000 req/hr instead of 60); signed-in users already have the higher limit.
+      if (signedIn) { status.textContent = 'GitHub rate limit reached. Try again in a few minutes.'; resultRoot.innerHTML = fallback; }
+      else {
+        status.textContent = '';
+        resultRoot.innerHTML = `<div class="nudge" role="alert"><span class="nudge-icon" aria-hidden="true">⚡</span><div class="nudge-copy"><h3>Rate limited by GitHub</h3><p>Sign in with GitHub to get 5,000 requests per hour instead of 60.</p></div><a class="btn btn-primary" href="${escape(AUTH_BASE)}/auth/login">Sign in with GitHub →</a></div>${fallback}`;
+      }
+    } else {
+      status.textContent = `Search unavailable: ${err instanceof Error ? err.message : 'Unknown error'}. Try again later or use GitHub Search directly.`;
+      resultRoot.innerHTML = fallback;
+    }
   } finally { btn.disabled = false; btn.innerHTML = 'Discover opportunities <span>→</span>'; }
 });
+
+// Example chips pre-fill the filter fields and run the search immediately.
+document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => {
+  if (btn.disabled) return;
+  form.elements.languages.value = chip.dataset.languages;
+  form.elements.interests.value = chip.dataset.interests;
+  form.elements.level.value = chip.dataset.level;
+  form.requestSubmit();
+}));
 
 // Optional GitHub sign-in. The Worker owns the session cookie; this only reads the public identity.
 // Any failure (Worker down, blocked, bad payload) leaves the auth UI hidden: sign-in is never required.
@@ -291,6 +312,7 @@ async function initAuth() {
     document.querySelector('#signout').href = `${AUTH_BASE}/auth/logout`;
     userBox.hidden = false; root.hidden = false;
     // Signed in: route GitHub calls through the Worker, which attaches the session's token (5000 req/hr instead of 60).
+    signedIn = true;
     proxyClient = createGitHubClient({ proxyBase: PROXY_BASE });
     proxyNote = `✓ Signed in as ${user.login} · Enhanced rate limits active`;
     // Don't clobber a search that finished or started while the sign-in check was in flight.
