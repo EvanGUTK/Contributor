@@ -4,14 +4,15 @@
   <p><strong>Find your place in open source.</strong></p>
   <p>Discover meaningful GitHub issues, repositories, and pull requests worth reviewing — with transparent matching and optional AI-agent assistance.</p>
   <p>
-    <img src="https://img.shields.io/badge/STATUS-EARLY_ALPHA-153b30?style=for-the-badge&labelColor=081b19" alt="Early alpha" />
+    <img src="https://img.shields.io/badge/STATUS-ALPHA-153b30?style=for-the-badge&labelColor=081b19" alt="Alpha" />
     <img src="https://img.shields.io/badge/CORE-FREE_FOREVER-2b7f5b?style=for-the-badge&labelColor=081b19" alt="Free core" />
     <img src="https://img.shields.io/badge/AI-BYOK%20%7C%20OPTIONAL-496c9b?style=for-the-badge&labelColor=081b19" alt="Optional BYOK AI" />
     <img src="https://img.shields.io/badge/MCP-V2_2026--07--28-6655a1?style=for-the-badge&labelColor=081b19" alt="MCP v2 target" />
     <img src="https://img.shields.io/badge/LICENSE-MIT-74ad83?style=for-the-badge&labelColor=081b19" alt="MIT license" />
   </p>
   <p>
-    <a href="#-try-the-discovery-mvp">Try the MVP</a> ·
+    <a href="https://contributor-7cw.pages.dev">Try it live</a> ·
+    <a href="#-try-contributor">Quick start</a> ·
     <a href="#-how-it-works">How it works</a> ·
     <a href="#-mcp-and-your-ai-agent">MCP setup</a> ·
     <a href="#-zero-subscription-economics">Cost</a> ·
@@ -22,7 +23,7 @@
 ---
 
 > [!IMPORTANT]
-> **Current state:** Working static discovery prototype and tested ranking/GitHub request logic. A ten-tool local **MCP server source** is included, using the current TypeScript SDK v2 package, but dependencies and live MCP client compatibility have not been verified in this environment. Hosted login, CodeRabbit automation, persistent accounts, and the browser extension are *planned*, not shipped. No demo result cards are fabricated.
+> **Current state (alpha):** The discovery web app is **live at [contributor-7cw.pages.dev](https://contributor-7cw.pages.dev)** with tested ranking, GitHub request logic, repository passports and an optional read-only GitHub sign-in (a Cloudflare Worker). A ten-tool local **MCP server** passes an automated stdio smoke test (`npm run test:mcp`), but it has **not yet been tested against live Claude, Codex, OpenCode or Hermes clients**. CodeRabbit automation and persistent accounts are *planned*, and the browser extension is a scaffold only. No demo result cards are fabricated.
 
 ## ✦ The idea
 
@@ -32,19 +33,23 @@ Finding a good repository is harder than writing your first line of code. A sear
 
 | Feature | Why it matters | Current status |
 |:---|:---|:---|
-| **Opportunity Discovery** | Find repositories, issues and review opportunities without a starting URL | **Prototype** |
-| **Explainable Matching** | Relevance reasons and transparent heuristic scoring | **Prototype** |
-| **AI Handoff Prompts** | Contextual prompt for your chosen GitHub opportunity | **Prototype** |
-| **Contributor MCP** | Ask Claude, Codex, OpenCode or Hermes to discover for you | **Source; validation pending** |
-| **Hermes Memory-Aware Search** | Assistant supplies approved relevant preferences, without copying memory files | **Supported by tool arguments; workflow testing pending** |
-| **AI Review Coach** | Evidence-based diff/PR assistance, drafts only | **Planned** |
+| **Opportunity Discovery** | Find repositories, issues and review opportunities without a starting URL | **Shipped** (live web app + MCP) |
+| **Explainable Matching** | Relevance reasons and transparent heuristic scoring | **Shipped** |
+| **AI Handoff Prompts** | Contextual prompt for your chosen GitHub opportunity | **Shipped** |
+| **Contributor MCP** | Ask Claude, Codex, OpenCode or Hermes to discover for you | **Shipped; stdio smoke test passes. Live client testing pending** |
+| **Repository Passport** | Maintainer responsiveness, guidelines, license and task readiness | **Shipped** |
+| **AI Review Coach** | Evidence-based diff/PR assistance, drafts only | **Shipped** (checklists and drafts; you decide what to post) |
+| **Hermes Memory Handoff** | Assistant supplies approved relevant preferences, without copying memory files | **Shipped** (consent-gated tool; testing with a live Hermes pending) |
+| **BYOK docs** | Clear guidance on bring-your-own-key usage, billing and spend limits | **Shipped** ([BYOK guide](docs/integrations/BYOK.md)) |
+| **GitHub sign-in** | Optional read-only login for higher GitHub rate limits | **Shipped** (Cloudflare Worker); no hosted accounts or database yet |
 | **CodeRabbit Adapter** | Optional local review evidence for checked-out PRs | **Planned** |
-| **Contribution Passport** | Maintainer responsiveness, guidelines, license and task readiness | **Planned** |
-| **Browser Extension** | Get recommendations directly in GitHub pages | **Planned** |
+| **Browser Extension** | Get recommendations directly in GitHub pages | **Scaffold only** (badge on issue pages; match overlay *planned*) |
 
-## ◈ Try the discovery MVP
+## ◈ Try Contributor
 
-**Requirements:** Node.js 22+ for the local build and preview. No API key, database, or subscription needed for the web prototype.
+**In your browser (no install):** open **[contributor-7cw.pages.dev](https://contributor-7cw.pages.dev)**. Choose your interests, language, experience, time budget, and whether you prefer issues, repositories or code reviews. Results are fetched live from GitHub’s public API. Anonymous GitHub search is rate-limited; signing in with GitHub (read-only) routes requests through the Contributor Worker for higher limits. To connect an AI assistant, see the **[setup page](https://contributor-7cw.pages.dev/setup.html)**.
+
+**Run it locally:** Node.js 22+ is required. No API key, database, or subscription is needed for the web app.
 
 ```bash
 git clone https://github.com/EvanGUTK/contributor.git
@@ -53,9 +58,9 @@ npm run build
 npm run preview
 ```
 
-Open **http://127.0.0.1:4173/**. Choose your interests, language, experience, time budget, and whether you prefer issues, repositories or code reviews. Results are fetched live from GitHub’s public API. Anonymous GitHub search is rate-limited, so this is a beta discovery experience—not an unrestricted crawler.
+Open **http://127.0.0.1:4173/**.
 
-`npm run test` executes the dependency-free matching/API unit tests. `npm install` is **not required** to build or preview the static web app; it **is required** before running the MCP server.
+`npm run test` executes the dependency-free unit tests; `npm run check` runs tests plus the build. `npm install` is **not required** to build or preview the static web app; it **is required** before running the MCP server.
 
 ## ⌁ How it works
 
@@ -97,7 +102,9 @@ npm install
 npm run mcp
 ```
 
-The command waits for MCP JSON-RPC messages on **stdio**; it is not an interactive terminal application. For provider-specific registration and Hermes memory handoff, read **[MCP client setup](docs/integrations/MCP_CLIENTS.md)**. The v2 server package is used instead of the retired v1 all-in-one SDK. Current/latest stable client support must be confirmed through a compatibility test matrix before release.
+The command waits for MCP JSON-RPC messages on **stdio**; it is not an interactive terminal application. Copy-paste registration instructions for each assistant are on the **[setup page](https://contributor-7cw.pages.dev/setup.html)**; the same material and Hermes memory handoff details are in **[MCP client setup](docs/integrations/MCP_CLIENTS.md)**. The v2 server package is used instead of the retired v1 all-in-one SDK.
+
+`npm run test:mcp` runs an automated stdio smoke test (handshake, `tools/list` returning all ten tools, one `discover_opportunities` call). It proves the server speaks the protocol; it does **not** certify any specific client. Live client results are tracked in the [compatibility matrix](docs/integrations/COMPATIBILITY_MATRIX.md).
 
 > [!NOTE]
 > MCP uses the **AI model already connected to your assistant**. Contributor doesn't need your Claude/Codex/Hermes model API key. An optional GitHub token can raise public search limits for the local MCP server, but leave it unset if you want entirely anonymous discovery.
@@ -119,15 +126,15 @@ The command waits for MCP JSON-RPC messages on **stdio**; it is not an interacti
 
 | Layer | Current design |
 |:---|:---|
-| Web MVP | Static HTML/CSS/ES modules, zero dependency build and deploy |
+| Web app | Static HTML/CSS/ES modules, zero dependency build; deployed on Cloudflare Pages |
 | Core ranking | Deterministic JavaScript with scored factors and explanations |
 | Discovery data | Read-only GitHub REST search; bounded requests; short-lived cache |
 | MCP | Node.js + `@modelcontextprotocol/server` v2 + Zod |
-| Authentication | Anonymous MVP; GitHub App fine-grained OAuth planned |
-| Production UI | React + TypeScript planned after MVP validation |
+| Authentication | Anonymous by default; optional read-only GitHub App login via a Cloudflare Worker (`worker/`) with a signed, HttpOnly session cookie |
+| Production UI | React + TypeScript *planned* after validation |
 | Optional companion | Local Git worktrees, CodeRabbit CLI, targeted tests (later) |
 | Hosting | GitHub Pages / Cloudflare Pages static assets; Workers only if needed |
-| Storage | No hosted account DB yet; scoped storage + consent-based preferences later |
+| Storage | Saved opportunities and preferences stay in your browser’s `localStorage`; no hosted account DB yet (D1 *planned*) |
 
 ## ⟡ Repository tree
 
@@ -135,23 +142,29 @@ The command waits for MCP JSON-RPC messages on **stdio**; it is not an interacti
 contributor/
 ├── README.md                  # Vision, status, quick start
 ├── LICENSE                    # MIT open-source license
-├── web/                       # Working static discovery interface
+├── web/                       # Live static discovery interface
 │   ├── index.html             # Accessible filter UI
-│   ├── app.mjs                 # Live search and prompt handoff
-│   ├── styles.css             # Responsive dark-green design system
+│   ├── setup.html             # MCP setup instructions per assistant
+│   ├── app.mjs                # Live search, saving and prompt handoff
+│   ├── styles.css             # Responsive design system
 │   └── assets/                # Favicon
+├── worker/                    # Cloudflare Worker: read-only GitHub login + API proxy
+│   ├── auth.js                # OAuth code flow, signed session cookie, /api/github proxy
+│   └── wrangler.toml          # Worker config (secrets set out-of-band)
+├── extension/                 # Manifest V3 browser extension (scaffold only)
 ├── packages/
-│   ├── core/matching.mjs      # Explainable ranking and prompt generation
+│   ├── core/                  # Matching, passport, review coach, memory consent
 │   └── github/client.mjs      # Read-only bounded GitHub API adapter
-├── apps/mcp/server.mjs        # Ten tools, stdio MCP v2 source
+├── apps/mcp/server.mjs        # Ten tools, stdio MCP v2 server
 ├── tests/                     # Local deterministic unit tests
-├── scripts/                   # Static build, preview and guarded publishing
+├── scripts/                   # Static build, preview, MCP smoke test, deploy verification, guarded publishing
 ├── assets/                    # GitHub README branding
+├── examples/                  # Sample discovery briefs and preferences
 ├── docs/
-│   ├── product/               # PRD, cost guardrails, feature phases
-│   ├── architecture/          # Architecture, data contracts, discovery pipeline
-│   ├── integrations/          # MCP, Hermes memory, CodeRabbit
-│   ├── engineering/           # Security, accessibility, quality, contribution policy
+│   ├── product/               # PRD, cost guardrails, roadmap
+│   ├── architecture/          # Architecture, auth flow, data contracts, matching
+│   ├── integrations/          # MCP clients, BYOK, Hermes memory, CodeRabbit
+│   ├── engineering/           # Security, testing, deployment, validation reports
 │   ├── decisions/             # Architecture decision records
 │   └── research/              # Primary-source research register
 └── .github/ISSUE_TEMPLATE/     # Structured community issue templates
@@ -161,7 +174,7 @@ contributor/
 
 The project welcomes **issues, focused changes, tests, accessibility fixes, provider-compatibility evidence and documentation**. Read [CONTRIBUTING.md](CONTRIBUTING.md) and [ROADMAP.md](docs/product/ROADMAP.md) before taking on a larger issue. Please do **not** submit auto-generated PR comments or reviews without understanding and verifying them.
 
-**Project status:** initial code + architecture scaffold published publicly. No live cloud service, GitHub OAuth, hosted MCP, local CodeRabbit execution, or cross-client integration test has been completed.
+**Project status:** alpha. The web app and the read-only GitHub login Worker are deployed; the local MCP server passes its automated stdio smoke test. Not yet done: testing with live Claude, Codex, OpenCode and Hermes clients, human verification of browser CORS/quota behavior, hosted MCP, local CodeRabbit execution, persistent storage and a public-beta security review. See the [roadmap](docs/product/ROADMAP.md).
 
 <div align="center">
   <strong>Find good work. Do good work. Help open source grow.</strong>
