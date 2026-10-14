@@ -62,6 +62,21 @@ export function calibrateExperience(p) {
 /** Score points removed from an issue that already has a linked open PR: still shown, but ranked lower. */
 export const IN_PROGRESS_PENALTY = 15;
 
+/** Score points removed from a draft pull request: its author may not want reviews yet. */
+export const DRAFT_PENALTY = 20;
+
+/**
+ * Score adjustment for a pull request's diff size, or null when changed_files is unknown.
+ * GitHub's issue search does not return changed_files; it is only present on full pull request records.
+ */
+export function scoreReviewSize(changedFiles) {
+  if (!Number.isFinite(changedFiles)) return null;
+  if (changedFiles <= 10) return { points: 8, reason: 'Small diff — easy to start reviewing' };
+  if (changedFiles <= 50) return { points: 4, reason: null };
+  if (changedFiles > 200) return { points: -5, reason: 'Large diff — set aside adequate time' };
+  return { points: 0, reason: null };
+}
+
 /** Always attached to a responsiveness result so callers never present the estimate as certain. */
 export const RESPONSIVENESS_NOTE = 'Responsiveness is estimated from public data only.';
 
@@ -181,9 +196,17 @@ export function scoreOpportunity(item, preferences = {}, repo = null, { inProgre
   breakdown.maintainership = repo?.disabled ? 0 : maintainership ? maintainership.score : repo?.archived ? 0 : 7;
   if (repo?.archived) reasons.push('Archived repository: confirm contribution policy');
   else if (maintainership) reasons.push(...maintainership.reasons.filter(r => /recently active|closing issues|backlog/.test(r)).map(r => `Maintainers: ${r}`));
-  const base = Math.min(100, Object.values(breakdown).reduce((a, b) => a + b, 0));
-  const score = inProgress ? Math.max(0, base - IN_PROGRESS_PENALTY) : base;
+  // Size only joins the breakdown when the item carries changed_files, so other results keep their shape.
+  const size = item.pull_request ? scoreReviewSize(item.changed_files) : null;
+  if (size) {
+    breakdown.size = size.points;
+    if (size.reason) reasons.push(size.reason);
+  }
+  const draft = Boolean(item.pull_request) && item.draft === true;
+  const base = clamp(Object.values(breakdown).reduce((a, b) => a + b, 0), 0, 100);
+  const score = Math.max(0, base - (inProgress ? IN_PROGRESS_PENALTY : 0) - (draft ? DRAFT_PENALTY : 0));
   if (inProgress) reasons.push('A linked open pull request may already address this issue');
+  if (draft) reasons.push('Draft PR — author may not want reviews yet');
   const safetyFlags = assessReviewSafety(item, repo, `${name} ${description}`);
   return { score, inProgress, maintainership, breakdown, reasons, difficulty, safetyFlags, confidence: repo ? 'medium' : 'limited',
     calibration: { interestOnly, quickTask },
