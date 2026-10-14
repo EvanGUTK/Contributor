@@ -266,6 +266,15 @@ form.addEventListener('submit', async event => {
   } finally { btn.disabled = false; btn.innerHTML = 'Discover opportunities <span>→</span>'; }
 });
 
+// Example chips pre-fill the filter fields and run the search immediately.
+document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => {
+  if (btn.disabled) return;
+  form.elements.languages.value = chip.dataset.languages;
+  form.elements.interests.value = chip.dataset.interests;
+  form.elements.level.value = chip.dataset.level;
+  form.requestSubmit();
+}));
+
 // Optional GitHub sign-in. The Worker owns the session cookie; this only reads the public identity.
 // Any failure (Worker down, blocked, bad payload) leaves the auth UI hidden: sign-in is never required.
 const AUTH_BASE = 'https://contributor-auth.evan-workspace.workers.dev';

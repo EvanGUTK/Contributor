@@ -127,6 +127,12 @@ section[id] { scroll-margin-top: 72px; }
 .modes label:hover span { border-color: rgba(255, 255, 255, 0.16); }
 .modes input:checked + span { border-color: var(--accent); background: var(--accent); color: #fff; }
 .modes input:focus-visible + span { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
+/* Example searches: pre-fill the form and submit in one click. */
+.examples { grid-column: span 4; display: flex; flex-direction: column; gap: 8px; }
+.examples-label { font-size: 11px; color: var(--text-subtle); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-muted); font-size: 12px; border-radius: 999px; padding: 5px 14px; cursor: pointer; transition: background 0.15s ease; }
+.chip:hover { background: var(--bg-elevated); }
 .form-footer { grid-column: span 4; display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid var(--border-subtle); padding-top: 20px; }
 .local-memory { font-size: 13px; color: var(--text-muted); display: flex; gap: 10px; align-items: center; cursor: pointer; }
 .local-memory input { accent-color: var(--accent); inline-size: 16px; block-size: 16px; }
@@ -250,7 +256,7 @@ footer p { margin: 0; }
   .hero h1 { font-size: 44px; }
   .filter-panel { grid-template-columns: 1fr 1fr; padding: 24px; }
   .field-wide { grid-column: span 1; }
-  .mode-field, .form-footer { grid-column: span 2; }
+  .mode-field, .examples, .form-footer { grid-column: span 2; }
   .results { grid-template-columns: repeat(2, 1fr); }
   .steps { grid-template-columns: repeat(2, 1fr); }
   .top-status { display: none; }
@@ -267,7 +273,7 @@ footer p { margin: 0; }
   .hero h1 { font-size: 36px; letter-spacing: -0.8px; }
   .hero-actions { flex-direction: column; align-items: stretch; width: 100%; }
   .filter-panel { grid-template-columns: 1fr; padding: 20px; }
-  .field-wide, .mode-field, .form-footer { grid-column: 1; }
+  .field-wide, .mode-field, .examples, .form-footer { grid-column: 1; }
   .form-footer { align-items: stretch; flex-direction: column; }
   .results, .steps { grid-template-columns: 1fr; }
   .finder { padding: 64px 0; }
