@@ -19,7 +19,9 @@ const PROXY_RESPONSE_HEADERS = ['content-type', 'etag', 'link', 'x-ratelimit-lim
 const BYOK_TTL_SECONDS = 30 * 24 * 60 * 60;
 const BYOK_BODY_LIMIT = 4096;
 // The only method each BYOK endpoint accepts; the router answers OPTIONS preflight for all of them.
-const BYOK_ROUTES = { '/api/byok/save': 'POST', '/api/byok/status': 'GET', '/api/byok/delete': 'DELETE' };
+const BYOK_ROUTES = { '/api/byok/save': 'POST', '/api/byok/explain': 'POST', '/api/byok/status': 'GET', '/api/byok/delete': 'DELETE' };
+const EXPLAIN_PROMPT_LIMIT = 500;
+const PROVIDER_TIMEOUT_MS = 20000;
 
 const encoder = new TextEncoder();
 
@@ -261,6 +263,45 @@ async function handleByokSave(request, env, session) {
   return json({ saved: true }, 200, env);
 }
 
+// Worker -> provider call. Failures carry only a reason code: upstream bodies can echo a (masked) key and are dropped.
+async function requestExplanation(apiKey, prompt) {
+  const messages = [{ role: 'user', content: prompt }];
+  const anthropic = providerOf(apiKey) === 'anthropic';
+  const res = anthropic
+    ? await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 120, messages }),
+    })
+    : await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST', signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 120, messages }),
+    });
+  if (res.status === 401 || res.status === 403) throw Object.assign(new Error('rejected'), { code: 'key_rejected' });
+  if (!res.ok) throw Object.assign(new Error('failed'), { code: 'provider_failed' });
+  const data = await res.json();
+  const text = anthropic
+    ? (Array.isArray(data?.content) ? data.content : []).filter(x => x?.type === 'text').map(x => x.text).join('')
+    : data?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string' || !text.trim()) throw Object.assign(new Error('empty'), { code: 'provider_failed' });
+  return text.trim();
+}
+
+async function handleByokExplain(request, env, session) {
+  const body = await readJsonBody(request);
+  const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
+  if (!prompt || prompt.length > EXPLAIN_PROMPT_LIMIT) return json({ error: 'invalid_prompt', message: `Prompt must be 1-${EXPLAIN_PROMPT_LIMIT} characters.` }, 400, env);
+  const stored = await env.BYOK_KEYS.get(byokStorageKey(session));
+  if (stored === null) return json({ error: 'no_key', message: 'Save an API key first' }, 400, env);
+  const apiKey = await decryptKey(env.WORKER_SECRET, String(session.id), stored);
+  try {
+    return json({ explanation: await requestExplanation(apiKey, prompt) }, 200, env);
+  } catch (error) {
+    return json({ error: error.code || 'provider_failed' }, 502, env);
+  }
+}
+
 async function handleByokStatus(env, session) {
   const { value, metadata } = await env.BYOK_KEYS.getWithMetadata(byokStorageKey(session));
   const provider = value !== null && (metadata?.provider === 'openai' || metadata?.provider === 'anthropic') ? metadata.provider : null;
@@ -284,6 +325,7 @@ async function handleByok(request, env, url) {
   try {
     switch (url.pathname) {
       case '/api/byok/save': return await handleByokSave(request, env, session);
+      case '/api/byok/explain': return await handleByokExplain(request, env, session);
       case '/api/byok/status': return await handleByokStatus(env, session);
       default: return await handleByokDelete(env, session);
     }

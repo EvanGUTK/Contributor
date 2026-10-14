@@ -137,3 +137,102 @@ test('a missing KV binding fails closed with 503', async () => {
   assert.equal(response.status, 503);
   assert.ok(!(await response.text()).includes(OPENAI_KEY));
 });
+
+// Runs one /api/byok/explain call with the provider stubbed; records the outbound calls the Worker made.
+async function explain(env, cookie, body, providerResponse = () => Response.json({ choices: [{ message: { content: ' Great fit. ' } }] }), origin = APP) {
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => { calls.push({ url: String(url), options }); return providerResponse(String(url)); };
+  try {
+    const response = await call(env, 'POST', '/api/byok/explain', { cookie, body, origin });
+    return { response, text: await response.text(), calls };
+  } finally { globalThis.fetch = realFetch; }
+}
+
+test('explain calls OpenAI server-side with the decrypted key and returns only the explanation', async () => {
+  const env = makeEnv();
+  const cookie = await signIn(env);
+  await call(env, 'POST', '/api/byok/save', { cookie, body: { key: OPENAI_KEY } });
+  const { response, text, calls } = await explain(env, cookie, { prompt: 'Why is this a match?' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(JSON.parse(text), { explanation: 'Great fit.' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://api.openai.com/v1/chat/completions');
+  assert.equal(calls[0].options.headers.Authorization, `Bearer ${OPENAI_KEY}`);
+  assert.equal(JSON.parse(calls[0].options.body).messages[0].content, 'Why is this a match?');
+  assert.ok(!text.includes(OPENAI_KEY));
+  assert.ok(![...response.headers.values()].some(v => v.includes(OPENAI_KEY)));
+});
+
+test('explain routes Anthropic keys to the Messages API without the browser-access header', async () => {
+  const env = makeEnv();
+  const cookie = await signIn(env);
+  await call(env, 'POST', '/api/byok/save', { cookie, body: { key: ANTHROPIC_KEY } });
+  const { response, text, calls } = await explain(env, cookie, { prompt: 'Why?' }, () => Response.json({ content: [{ type: 'text', text: 'Because.' }] }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(JSON.parse(text), { explanation: 'Because.' });
+  assert.equal(calls[0].url, 'https://api.anthropic.com/v1/messages');
+  assert.equal(calls[0].options.headers['x-api-key'], ANTHROPIC_KEY);
+  assert.equal(calls[0].options.headers['anthropic-dangerous-direct-browser-access'], undefined);
+});
+
+test('explain without a saved key returns no_key and calls no provider', async () => {
+  const env = makeEnv();
+  const cookie = await signIn(env);
+  const { response, text, calls } = await explain(env, cookie, { prompt: 'Why?' });
+  assert.equal(response.status, 400);
+  assert.deepEqual(JSON.parse(text), { error: 'no_key', message: 'Save an API key first' });
+  assert.equal(calls.length, 0);
+});
+
+test('explain rejects missing, empty and over-500-character prompts before calling the provider', async () => {
+  const env = makeEnv();
+  const cookie = await signIn(env);
+  await call(env, 'POST', '/api/byok/save', { cookie, body: { key: OPENAI_KEY } });
+  for (const body of [{}, { prompt: '   ' }, { prompt: 7 }, { prompt: 'x'.repeat(501) }]) {
+    const { response, calls } = await explain(env, cookie, body);
+    assert.equal(response.status, 400, JSON.stringify(body).slice(0, 40));
+    assert.equal(calls.length, 0);
+  }
+  assert.equal((await explain(env, cookie, { prompt: 'x'.repeat(500) })).response.status, 200);
+});
+
+test('provider failures map to reason codes and never forward the upstream body', async () => {
+  const env = makeEnv();
+  const cookie = await signIn(env);
+  await call(env, 'POST', '/api/byok/save', { cookie, body: { key: OPENAI_KEY } });
+  const leaky = status => () => Response.json({ error: { message: `Incorrect API key provided: ${OPENAI_KEY}` } }, { status });
+  const rejected = await explain(env, cookie, { prompt: 'Why?' }, leaky(401));
+  assert.equal(rejected.response.status, 502);
+  assert.deepEqual(JSON.parse(rejected.text), { error: 'key_rejected' });
+  const failed = await explain(env, cookie, { prompt: 'Why?' }, leaky(500));
+  assert.deepEqual(JSON.parse(failed.text), { error: 'provider_failed' });
+  const empty = await explain(env, cookie, { prompt: 'Why?' }, () => Response.json({ choices: [] }));
+  assert.deepEqual(JSON.parse(empty.text), { error: 'provider_failed' });
+  const thrown = await explain(env, cookie, { prompt: 'Why?' }, () => { throw new Error(`network ${OPENAI_KEY}`); });
+  assert.equal(thrown.response.status, 502);
+  for (const result of [rejected, failed, empty, thrown]) assert.ok(!result.text.includes(OPENAI_KEY));
+});
+
+test("one user's ciphertext cannot be decrypted under another user's session", async () => {
+  const env = makeEnv();
+  await call(env, 'POST', '/api/byok/save', { cookie: await signIn(env, 7), body: { key: OPENAI_KEY } });
+  env.BYOK_KEYS.store.set('byok:8', env.BYOK_KEYS.store.get('byok:7'));
+  const { response, text, calls } = await explain(env, await signIn(env, 8), { prompt: 'Why?' });
+  assert.equal(response.status, 500);
+  assert.deepEqual(JSON.parse(text), { error: 'byok_failed' });
+  assert.equal(calls.length, 0);
+});
+
+test('explain requires a session and the app origin', async () => {
+  const env = makeEnv();
+  const cookie = await signIn(env);
+  await call(env, 'POST', '/api/byok/save', { cookie, body: { key: OPENAI_KEY } });
+  const anonymous = await explain(env, undefined, { prompt: 'Why?' });
+  assert.equal(anonymous.response.status, 401);
+  const crossSite = await explain(env, cookie, { prompt: 'Why?' }, undefined, 'https://evil.test');
+  assert.equal(crossSite.response.status, 403);
+  assert.equal(anonymous.calls.length + crossSite.calls.length, 0);
+  const preflight = await worker.fetch(new Request(`${BASE}/api/byok/explain`, { method: 'OPTIONS' }), env);
+  assert.equal(preflight.status, 204);
+});
