@@ -5,6 +5,7 @@ import * as z from 'zod/v4';
 import { createGitHubClient } from '../../packages/github/client.mjs';
 import { normalizePreferences, buildHandoffPrompt, scoreOpportunity } from '../../packages/core/matching.mjs';
 import { getPassportSummary } from '../../packages/core/passport.mjs';
+import { validateConsentPreferences, buildConsentSummary } from '../../packages/core/memory-consent.mjs';
 
 const client = createGitHubClient({ token: process.env.CONTRIBUTOR_GITHUB_TOKEN || undefined });
 const prefsSchema = {
@@ -44,6 +45,18 @@ function createServer() {
     const result = await client.discover(normalizePreferences(args), { limit: args.limit ?? 10 });
     return { found: result.items.length, at: result.at, warnings: result.warnings, opportunities: result.items.slice(0, 20).map(compact),
       nextStep: 'Explain the matches and allow the user to select. Do not contact maintainers automatically.' };
+  }));
+  server.registerTool('request_memory_handoff', {
+    description: 'Called by an AI assistant (e.g. Hermes) to declare that the user has approved sharing specific preferences for this discovery session. Only the listed typed fields are accepted — raw memory files, conversation history and private context are never read or stored.',
+    inputSchema: z.object({
+      // Loose so unexpected keys reach the handler and are reported in `rejected` rather than silently dropped.
+      preferences: z.looseObject({ ...prefsSchema, mode: z.enum(['all', 'repositories', 'issues', 'reviews']).optional() }),
+      consent_statement: z.string().max(200).describe('Human-readable statement the assistant shows the user before calling this tool, e.g. "Share your Python + AI interests with Contributor?"')
+    })
+  }, safe(async ({ preferences }) => {
+    const { sanitized, rejected } = validateConsentPreferences(preferences);
+    return { accepted: sanitized, rejected, summary: buildConsentSummary(sanitized),
+      policy: 'No raw memory, transcripts or private context accepted. User can override any preference.' };
   }));
   server.registerTool('find_review_requests', {
     description: 'Discover open public pull requests without submitted reviews; these are candidates, not necessarily requests for outside approval.',
