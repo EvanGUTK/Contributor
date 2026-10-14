@@ -1,6 +1,6 @@
 # MCP client onboarding and compatibility
 
-**Status:** local stdio MCP v2 source exists; this repo has **not yet verified live MCP handshakes** against four clients. These commands are intended setup starting points, not compatibility certification. Use stable versions available at time of installation.
+**Status:** local stdio MCP v2 exposes 10 tools and passes the automated stdio smoke test (`npm run test:mcp`), but this repo has **not yet verified live MCP handshakes** against the four clients below. These commands are intended setup starting points, not compatibility certification. See the [compatibility matrix](COMPATIBILITY_MATRIX.md) for what has and has not been tested. Use stable versions available at time of installation.
 
 ## Build and smoke test locally
 
@@ -17,7 +17,30 @@ Running `npm run mcp` directly will print a startup line to **stderr** and then 
 npx @modelcontextprotocol/inspector node apps/mcp/server.mjs
 ```
 
-Verify the server exposes ten tools (`discover_opportunities`, `find_review_requests`, `inspect_repository`, `analyze_issue`, `analyze_pull_request`, `prepare_contribution`, `get_contribution_status`, `get_repository_passport`, `request_memory_handoff`, `prepare_review_checklist`) and `discover_opportunities` returns actual GitHub results, or a clear rate-limit error. MCP v2 package is `@modelcontextprotocol/server` and supports the 2026-07-28 protocol line. For client setup, use an **absolute** path to `apps/mcp/server.mjs`.
+To run the automated stdio harness (spawns the server, performs the handshake, checks the tool list and makes one minimal `discover_opportunities` call; Node 22+, no GitHub token needed):
+
+```bash
+npm run test:mcp
+```
+
+It exits 0 on pass and 1 on fail, printing PASS/FAIL per assertion. It does not assert on live GitHub results.
+
+Verify the server exposes these ten tools and `discover_opportunities` returns actual GitHub results, or a clear rate-limit error:
+
+| Tool | Purpose |
+|:--|:--|
+| `discover_opportunities` | Primary entry point: find public repositories, issues and PRs for the user |
+| `find_review_requests` | Open public PRs without submitted reviews |
+| `inspect_repository` | Public repository metadata |
+| `get_repository_passport` | Contributor-readiness summary for a repository |
+| `analyze_issue` | Issue context and a safe starter plan prompt |
+| `analyze_pull_request` | PR metadata and first-page changed-file summaries |
+| `prepare_review_checklist` | Structured review checklist for a selected PR (does not post) |
+| `prepare_contribution` | Approval-first handoff prompt for a chosen opportunity |
+| `get_contribution_status` | Current public state of an issue or PR |
+| `request_memory_handoff` | Assistant declares user-approved preference sharing |
+
+MCP v2 package is `@modelcontextprotocol/server` and supports the 2026-07-28 protocol line. For client setup, use an **absolute** path to `apps/mcp/server.mjs`.
 
 ## Claude Code
 
