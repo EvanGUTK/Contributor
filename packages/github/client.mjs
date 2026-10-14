@@ -1,6 +1,7 @@
 /** Github public discovery: strictly read-only, bounded calls, transparent rate errors. */
 import { buildSearchQuery, normalizePreferences, projectIdFromIssue, scoreOpportunity } from '../core/matching.mjs';
 const API = 'https://api.github.com';
+const MAX_ROOT_ENTRIES = 200;
 
 export class GitHubApiError extends Error {
   constructor(message, status, reset = null) { super(message); this.name = 'GitHubApiError'; this.status = status; this.reset = reset; }
@@ -56,5 +57,18 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined } = {}
     for (const part of [owner, name]) if (!/^[\w.-]{1,100}$/.test(part)) throw new Error('Invalid GitHub repository identifier');
     return request(`/repos/${owner}/${name}`);
   }
-  return { discover, search, getRepo, request };
+  async function getRepoFiles(owner, name) {
+    for (const part of [owner, name]) if (!/^[\w.-]{1,100}$/.test(part)) throw new Error('Invalid GitHub repository identifier');
+    try {
+      const listing = await request(`/repos/${owner}/${name}/contents/`);
+      // A file or submodule response is an object, not a directory listing.
+      if (!Array.isArray(listing)) return [];
+      return listing.slice(0, MAX_ROOT_ENTRIES).map(({ name: fileName, path, type, size }) => ({ name: fileName, path, type, size }));
+    } catch (error) {
+      // GitHub answers 404 for the contents of an empty repository; the repository itself is verified separately by getRepo.
+      if (error instanceof GitHubApiError && error.status === 404) return [];
+      throw error;
+    }
+  }
+  return { discover, search, getRepo, getRepoFiles, request };
 }
