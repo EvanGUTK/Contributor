@@ -22,7 +22,7 @@
 ---
 
 > [!IMPORTANT]
-> **Current state:** Working static discovery prototype and tested ranking/GitHub request logic. A seven-tool local **MCP server source** is included, using the current TypeScript SDK v2 package, but dependencies and live MCP client compatibility have not been verified in this environment. Hosted login, CodeRabbit automation, persistent accounts, and the browser extension are *planned*, not shipped. No demo result cards are fabricated.
+> **Current state:** Working static discovery prototype and tested ranking/GitHub request logic. A ten-tool local **MCP server source** is included, using the current TypeScript SDK v2 package, but dependencies and live MCP client compatibility have not been verified in this environment. Hosted login, CodeRabbit automation, persistent accounts, and the browser extension are *planned*, not shipped. No demo result cards are fabricated.
 
 ## ✦ The idea
 
@@ -88,9 +88,9 @@ flowchart TD
 
 ## ⌘ MCP and your AI agent
 
-This repository includes a **local stdio MCP server** exposing seven read-focused tools:
+This repository includes a **local stdio MCP server** exposing ten read-focused tools:
 
-`discover_opportunities` · `find_review_requests` · `inspect_repository` · `analyze_issue` · `analyze_pull_request` · `prepare_contribution` · `get_contribution_status`
+`discover_opportunities` · `find_review_requests` · `inspect_repository` · `analyze_issue` · `analyze_pull_request` · `prepare_contribution` · `get_contribution_status` · `get_repository_passport` · `request_memory_handoff` · `prepare_review_checklist`
 
 ```bash
 npm install
@@ -143,7 +143,7 @@ contributor/
 ├── packages/
 │   ├── core/matching.mjs      # Explainable ranking and prompt generation
 │   └── github/client.mjs      # Read-only bounded GitHub API adapter
-├── apps/mcp/server.mjs        # Seven tools, stdio MCP v2 source
+├── apps/mcp/server.mjs        # Ten tools, stdio MCP v2 source
 ├── tests/                     # Local deterministic unit tests
 ├── scripts/                   # Static build, preview and guarded publishing
 ├── assets/                    # GitHub README branding
