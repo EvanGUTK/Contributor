@@ -7,7 +7,10 @@ export const ACTIVITY_WINDOW_DAYS = 90;
 const DAY_MS = 86400000;
 /** Repository search tries at most this many interest words, one request each. */
 export const MAX_TOPIC_WORDS = 2;
-/** Review opportunities require at least this many repository stars (a higher bar than the 10 used for issues and repositories). */
+/**
+ * Review opportunities from repositories with fewer stars than this are flagged (a higher bar than the 10 used for repositories).
+ * GitHub's issue/PR search has no stars: qualifier (it is treated as free text), so this is enforced on repository metadata after the search.
+ */
 export const REVIEW_MIN_STARS = 25;
 
 const normalize = value => String(value ?? '').toLowerCase().trim();
@@ -225,8 +228,8 @@ export function buildSearchQuery(prefs, kind, { now = new Date(), topic } = {}) 
     // A comma between label values is GitHub's OR; the updated: qualifier drops stale issues.
     return `is:issue is:open label:"good first issue","help wanted" updated:>=${since}${language}`;
   }
-  // Unreviewed PRs include company-internal and niche-domain work; a higher star bar than issues keeps out low-activity repos.
-  if (kind === 'reviews') return `is:pr is:open review:none stars:>=${REVIEW_MIN_STARS}${language}`;
+  // No stars: here; /search/issues does not support it and would treat it as text. See REVIEW_MIN_STARS.
+  if (kind === 'reviews') return `is:pr is:open review:none${language}`;
   if (kind === 'repositories') {
     const chosen = topic === undefined ? extractTopics(p.interests, 1)[0] : extractTopics(topic, 1)[0];
     return `archived:false fork:false stars:>=10${language.replace('%2B', '+')}${chosen ? ` ${chosen}` : ''}`;

@@ -178,10 +178,10 @@ test('scoreOpportunity scores an archived repo zero even when signals look healt
 const reviewPr = (overrides = {}) => ({ pull_request: {}, title: 'Fix parser edge case', body: 'Handles empty input in the tokenizer.', html_url: 'https://github.com/example/parser/pull/7', repository_url: 'https://api.github.com/repos/example/parser', updated_at: new Date().toISOString(), ...overrides });
 const safety = (item, stars) => scoreOpportunity(item, {}, stars === undefined ? null : { stargazers_count: stars, full_name: 'example/parser' }).safetyFlags;
 
-test('review search requires at least 25 stars and keeps the language filter', () => {
+test('review search keeps the language filter and sends no stars qualifier, which issue search does not support', () => {
   assert.equal(REVIEW_MIN_STARS, 25);
-  assert.equal(buildSearchQuery({ languages: ['Python'] }, 'reviews'), 'is:pr is:open review:none stars:>=25 language:Python');
-  assert.equal(buildSearchQuery({}, 'reviews'), 'is:pr is:open review:none stars:>=25');
+  assert.equal(buildSearchQuery({ languages: ['Python'] }, 'reviews'), 'is:pr is:open review:none language:Python');
+  assert.equal(buildSearchQuery({}, 'reviews'), 'is:pr is:open review:none');
 });
 test('a review in a repository under 25 stars is flagged, not removed', () => {
   const m = scoreOpportunity(reviewPr(), {}, { stargazers_count: REVIEW_MIN_STARS - 1 });
