@@ -12,6 +12,7 @@ const REVIEW_LOOKUP_DEADLINE_MS = 8000;
 const RECENT_CLOSE_WINDOW_DAYS = 30;
 const realSleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const isRateLimited = status => status === 403 || status === 429;
+const DRAFT_REVIEW_WARNING = 'Draft PR — not ready for review';
 
 export class GitHubApiError extends Error {
   constructor(message, status, reset = null, retries = 0) { super(message); this.name = 'GitHubApiError'; this.status = status; this.reset = reset; this.retries = retries; }
@@ -147,7 +148,11 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined, proxy
       const repo = repoName ? repos.get(repoName) ?? reviewRepos.get(repoName) : item._kind === 'repositories' ? item : null;
       const inProgress = linked.has(item);
       const result = scoreOpportunity(item, p, repo, { inProgress });
-      return { ...item, _repoName: repoName || item.full_name, _inProgress: inProgress, _match: result };
+      if (item._kind !== 'reviews') return { ...item, _repoName: repoName || item.full_name, _inProgress: inProgress, _match: result };
+      if (item.draft === true) result.safetyFlags = { ...result.safetyFlags, warnings: [DRAFT_REVIEW_WARNING] };
+      // Search results already carry the conversation comment count; null means unknown, never zero.
+      const commentCount = Number.isFinite(item.comments) ? item.comments : null;
+      return { ...item, _repoName: repoName || item.full_name, _inProgress: inProgress, _commentCount: commentCount, _match: result };
     });
     return { items: items.sort((a, b) => b._match.score - a._match.score), warnings,
       searchedKinds: kinds, at: new Date().toISOString(), profile: p };

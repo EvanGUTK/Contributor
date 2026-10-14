@@ -271,7 +271,28 @@ test('review discovery sends the selected language and no stars qualifier', asyn
   const queries = [];
   const client = createGitHubClient({ fetchImpl: async url => { queries.push(queryOf(url)); return reply({ items: [] }); } });
   await client.discover({ mode: 'reviews', languages: ['Rust'] });
-  assert.deepEqual(queries, ['is:pr is:open review:none language:Rust']);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0], /^is:pr is:open review:none updated:>=\d{4}-\d{2}-\d{2} language:Rust$/);
+});
+
+test('review search query includes an updated: date filter about 30 days back', async () => {
+  const queries = [];
+  const client = createGitHubClient({ fetchImpl: async url => { queries.push(queryOf(url)); return reply({ items: [] }); } });
+  await client.discover({ mode: 'reviews' });
+  const since = /updated:>=(\d{4}-\d{2}-\d{2})/.exec(queries[0])?.[1];
+  assert.ok(since, `missing updated: filter in ${queries[0]}`);
+  const days = (Date.now() - Date.parse(`${since}T00:00:00Z`)) / 86400000;
+  assert.ok(days >= 30 && days < 31, `expected a 30-day window, got ${days}`);
+});
+test('draft review PRs carry a draft warning and the search comment count', async () => {
+  const prs = [{ ...reviewPr(1, 'a/b'), draft: true, comments: 4 }, { ...reviewPr(2, 'c/d'), draft: false }];
+  const client = createGitHubClient({ fetchImpl: reviewFetch({ prs, stars: { 'a/b': 100, 'c/d': 100 } }) });
+  const { items } = await client.discover({ mode: 'reviews' });
+  const byRepo = Object.fromEntries(items.map(i => [i._repoName, i]));
+  assert.deepEqual(byRepo['a/b']._match.safetyFlags.warnings, ['Draft PR — not ready for review']);
+  assert.equal(byRepo['a/b']._commentCount, 4);
+  assert.equal(byRepo['c/d']._match.safetyFlags.warnings, undefined);
+  assert.equal(byRepo['c/d']._commentCount, null);
 });
 
 test('stalled star lookups hit an overall deadline and discovery still returns every review', async () => {
