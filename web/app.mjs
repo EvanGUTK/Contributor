@@ -116,3 +116,30 @@ form.addEventListener('submit', async event => {
     resultRoot.innerHTML = `<div class="empty"><a href="https://github.com/search?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22&type=issues" target="_blank" rel="noopener noreferrer">Continue searching on GitHub ↗</a></div>`;
   } finally { btn.disabled = false; btn.innerHTML = 'Discover opportunities <span>→</span>'; }
 });
+
+// Optional GitHub sign-in. The Worker owns the session cookie; this only reads the public identity.
+// Any failure (Worker down, blocked, bad payload) leaves the auth UI hidden: sign-in is never required.
+const AUTH_BASE = 'https://contributor-auth.evan-workspace.workers.dev';
+const AVATAR_PREFIX = 'https://avatars.githubusercontent.com/';
+async function initAuth() {
+  const root = document.querySelector('#auth');
+  const signIn = document.querySelector('#signin');
+  const userBox = document.querySelector('#auth-user');
+  if (!root || !signIn || !userBox) return;
+  try {
+    const res = await fetch(`${AUTH_BASE}/auth/user`, { credentials: 'include', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5000) });
+    if (res.status === 401) {
+      signIn.href = `${AUTH_BASE}/auth/login`; signIn.hidden = false; root.hidden = false;
+      return;
+    }
+    if (!res.ok) return;
+    const user = await res.json();
+    if (user?.authenticated !== true || typeof user.login !== 'string' || !user.login) return;
+    document.querySelector('#auth-name').textContent = user.login;
+    const avatar = document.querySelector('#auth-avatar');
+    if (typeof user.avatar_url === 'string' && user.avatar_url.startsWith(AVATAR_PREFIX)) avatar.src = user.avatar_url; else avatar.hidden = true;
+    document.querySelector('#signout').href = `${AUTH_BASE}/auth/logout`;
+    userBox.hidden = false; root.hidden = false;
+  } catch {}
+}
+initAuth();

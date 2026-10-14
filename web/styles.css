@@ -57,6 +57,16 @@ section[id] { scroll-margin-top: 72px; }
   padding: 7px 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.4px; white-space: nowrap;
 }
 
+.top-right { display: flex; align-items: center; gap: 14px; }
+.auth[hidden], .btn-signin[hidden], .auth-user[hidden] { display: none; }
+.btn.btn-signin { background: var(--text); color: #fff; font-size: 13px; padding: 8px 16px; gap: 8px; border-color: var(--text); white-space: nowrap; }
+.btn.btn-signin:hover { background: #000; }
+.auth-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); }
+.auth-user img { width: 28px; height: 28px; border-radius: 50%; background: var(--bg-alt); }
+.auth-name { font-weight: 600; color: var(--text); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auth-signout { color: var(--text-3); padding: 4px 0; }
+.auth-signout:hover { color: var(--text); text-decoration: underline; }
+
 /* Eyebrow labels */
 .eyebrow { color: var(--text-3); font-size: 12px; letter-spacing: 1px; font-weight: 600; margin: 0; text-transform: uppercase; }
 
@@ -209,6 +219,10 @@ footer p { margin: 0; }
   .topbar { gap: 12px; }
   .nav { gap: 16px; margin-left: auto; }
   .nav a:last-child { display: none; }
+  .nav { display: none; }
+  .top-right { margin-left: auto; }
+  .auth-name { display: none; }
+  .signin-long { display: none; }
   .hero { padding: 48px 0 56px; }
   .hero-sub { font-size: 17px; }
   .hero-visual { height: 380px; }
