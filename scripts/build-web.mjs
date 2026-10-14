@@ -4,7 +4,7 @@ const root = new URL('../', import.meta.url).pathname;
 const out = join(root, 'dist');
 await rm(out, { recursive: true, force: true });
 await mkdir(join(out, 'lib'), { recursive: true });
-for (const name of ['index.html', 'setup.html', 'app.mjs', 'styles.css']) await copyFile(join(root, 'web', name), join(out, name));
+for (const name of ['index.html', 'setup.html', '404.html', 'app.mjs', 'styles.css']) await copyFile(join(root, 'web', name), join(out, name));
 await cp(join(root, 'web/assets'), join(out, 'assets'), { recursive: true });
 // Copy root-level assets (e.g. contributor-banner.svg used by og:image meta tags)
 await cp(join(root, 'assets'), join(out, 'assets'), { recursive: true });
