@@ -156,3 +156,75 @@ test('a request that succeeds first time reports no retry status', async () => {
   await client.request('/repos/a/b');
   assert.deepEqual(statuses, []);
 });
+
+const issue = (n, repoName = 'a/b') => ({
+  number: n, title: `Issue ${n}`, html_url: `https://github.com/${repoName}/issues/${n}`,
+  repository_url: `https://api.github.com/repos/${repoName}`, labels: [{ name: 'good first issue' }], updated_at: new Date().toISOString(),
+});
+const isLookup = url => queryOf(url).includes('is:pr');
+const issueMode = { mode: 'issues' };
+
+test('an issue with a linked open PR is flagged inProgress and an unlinked one is not', async () => {
+  const lookups = [];
+  const client = createGitHubClient({ fetchImpl: async url => {
+    if (!isLookup(url)) return reply({ items: [issue(1), issue(2)] });
+    lookups.push(queryOf(url));
+    return reply({ items: queryOf(url).includes('/issues/1"') ? [{ number: 99 }] : [] });
+  } });
+  const { items } = await client.discover(issueMode);
+  const byNumber = Object.fromEntries(items.map(x => [x.number, x]));
+  assert.equal(byNumber[1]._inProgress, true);
+  assert.equal(byNumber[1]._match.inProgress, true);
+  assert.equal(byNumber[2]._inProgress, false);
+  assert.equal(byNumber[2]._match.inProgress, false);
+  assert.ok(byNumber[2]._match.score - byNumber[1]._match.score === 15, 'linked issue is penalised by 15 points');
+  assert.equal(items[0].number, 2, 'unlinked issue sorts first');
+  assert.ok(lookups.every(q => /^is:pr is:open repo:a\/b "https:\/\/github\.com\/a\/b\/issues\/\d+" in:body$/.test(q)));
+});
+
+test('the linked PR lookup asks for a single result', async () => {
+  const urls = [];
+  const client = createGitHubClient({ fetchImpl: async url => { urls.push(url); return reply({ items: isLookup(url) ? [] : [issue(1)] }); } });
+  await client.discover(issueMode);
+  assert.equal(new URL(urls[1]).searchParams.get('per_page'), '1');
+});
+
+test('linked PR lookups run at most five at a time', async () => {
+  let active = 0;
+  let peak = 0;
+  const client = createGitHubClient({ fetchImpl: async url => {
+    if (!isLookup(url)) return reply({ items: Array.from({ length: 12 }, (_, i) => issue(i + 1)) });
+    active += 1; peak = Math.max(peak, active);
+    await new Promise(resolve => setImmediate(resolve));
+    active -= 1;
+    return reply({ items: [] });
+  } });
+  await client.discover(issueMode, { limit: 12 });
+  assert.equal(peak, 5);
+});
+
+test('repeated discovery serves linked PR lookups from the cache', async () => {
+  let lookups = 0;
+  const client = createGitHubClient({ fetchImpl: async url => {
+    if (isLookup(url)) { lookups += 1; return reply({ items: [] }); }
+    return reply({ items: [issue(1)] });
+  } });
+  await client.discover(issueMode);
+  await client.discover(issueMode);
+  assert.equal(lookups, 1);
+});
+
+test('a failed linked PR lookup leaves the issue listed, unflagged, with a warning', async () => {
+  const client = createGitHubClient({ fetchImpl: async url => (isLookup(url) ? reply({}, { status: 500 }) : reply({ items: [issue(1)] })) });
+  const result = await client.discover(issueMode);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0]._inProgress, false);
+  assert.match(result.warnings.join(' '), /linked pull requests: could not check 1 issue/);
+});
+
+test('review and repository results trigger no linked PR lookups', async () => {
+  const queries = [];
+  const client = createGitHubClient({ fetchImpl: async url => { queries.push(queryOf(url)); return reply({ items: [{ ...issue(5), pull_request: {} }] }); } });
+  await client.discover({ mode: 'reviews' });
+  assert.equal(queries.length, 1);
+});
