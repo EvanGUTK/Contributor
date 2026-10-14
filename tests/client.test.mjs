@@ -274,6 +274,17 @@ test('review discovery sends the selected language and no stars qualifier', asyn
   assert.deepEqual(queries, ['is:pr is:open review:none language:Rust']);
 });
 
+test('stalled star lookups hit an overall deadline and discovery still returns every review', async () => {
+  const fetchImpl = async url => (new URL(url).pathname.startsWith('/search/')
+    ? reply({ items: [reviewPr(1, 'a/b'), reviewPr(2, 'c/d')] })
+    : new Promise(() => {}));
+  const client = createGitHubClient({ fetchImpl, reviewLookupDeadlineMs: 20 });
+  const { items, warnings } = await client.discover({ mode: 'reviews' });
+  assert.equal(items.length, 2);
+  assert.ok(items.every(i => i._match.safetyFlags.outsideReviewWelcome));
+  assert.match(warnings.join(' '), /could not check star counts for 2 repositories/);
+});
+
 const DAY = 86400000;
 const daysAgo = n => new Date(Date.now() - n * DAY).toISOString();
 const responsivenessFetch = ({ repoBody, closed, calls = [] }) => async url => {

@@ -6,6 +6,8 @@ const MAX_RETRIES = 2;
 const BASE_DELAY_MS = 1000;
 /** Linked-PR lookups run at most this many at a time per discover() call. */
 const MAX_PARALLEL_LOOKUPS = 5;
+/** Star-count lookups for review results are optional; the whole stage gives up after this long so discovery is never held back. */
+const REVIEW_LOOKUP_DEADLINE_MS = 8000;
 /** Issues closed within this many days count toward maintainer close velocity. */
 const RECENT_CLOSE_WINDOW_DAYS = 30;
 const realSleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -14,7 +16,7 @@ const isRateLimited = status => status === 403 || status === 429;
 export class GitHubApiError extends Error {
   constructor(message, status, reset = null, retries = 0) { super(message); this.name = 'GitHubApiError'; this.status = status; this.reset = reset; this.retries = retries; }
 }
-export function createGitHubClient({ fetchImpl = fetch, token = undefined, sleepFn = realSleep, onStatus = undefined } = {}) {
+export function createGitHubClient({ fetchImpl = fetch, token = undefined, sleepFn = realSleep, onStatus = undefined, reviewLookupDeadlineMs = REVIEW_LOOKUP_DEADLINE_MS } = {}) {
   const cache = new Map();
   async function request(endpoint, { ttlMs = 8 * 60_000 } = {}) {
     if (!endpoint.startsWith('/')) throw new Error('Only relative GitHub REST API paths are allowed');
@@ -100,16 +102,23 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined, sleep
    */
   async function lookupReviewRepos(reviews, known, warnings) {
     const found = new Map();
-    let failed = 0;
-    const queue = [...new Set(reviews.map(projectIdFromIssue).filter(name => name && !known.has(name)))];
+    const names = [...new Set(reviews.map(projectIdFromIssue).filter(name => name && !known.has(name)))];
+    const queue = [...names];
     const worker = async () => {
       for (let name = queue.shift(); name; name = queue.shift()) {
-        try { found.set(name, await getRepo(...name.split('/'))); } catch { failed += 1; }
+        try { found.set(name, await getRepo(...name.split('/'))); } catch { /* unknown: counted as unchecked below */ }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(MAX_PARALLEL_LOOKUPS, queue.length) }, worker));
-    if (failed) warnings.push(`review safety: could not check star counts for ${failed} repositor${failed === 1 ? 'y' : 'ies'}; verify outside reviews are welcome.`);
-    return found;
+    // Past the deadline, stop waiting and use whatever has arrived; late responses are ignored.
+    let timer;
+    const deadline = new Promise(resolve => { timer = setTimeout(resolve, reviewLookupDeadlineMs); });
+    try {
+      await Promise.race([Promise.all(Array.from({ length: Math.min(MAX_PARALLEL_LOOKUPS, names.length) }, worker)), deadline]);
+    } finally { clearTimeout(timer); }
+    queue.length = 0;
+    const unchecked = names.length - found.size;
+    if (unchecked) warnings.push(`review safety: could not check star counts for ${unchecked} repositor${unchecked === 1 ? 'y' : 'ies'}; verify outside reviews are welcome.`);
+    return new Map(found);
   }
   async function discover(preferences, { limit = 12 } = {}) {
     const p = normalizePreferences(preferences);
