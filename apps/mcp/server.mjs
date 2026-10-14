@@ -27,9 +27,11 @@ function safe(handler) {
   };
 }
 function compact(item) {
+  const inProgress = Boolean(item._inProgress);
   return { name: item.full_name || item.title, repository: item._repoName || item.full_name,
     url: item.html_url, state: item.state, labels: (item.labels || []).map(l => l.name),
-    match: item._match, updated_at: item.updated_at || item.pushed_at,
+    match: item._match, updated_at: item.updated_at || item.pushed_at, inProgress,
+    ...(inProgress && { inProgressNote: 'A linked PR may already address this issue — verify before starting work.' }),
     note: 'Opportunity is not guaranteed to remain available. Check maintainer guidelines before contributing.' };
 }
 

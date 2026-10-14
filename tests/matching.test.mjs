@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty, calibrateExperience, EXPERIENCED_HOURS, QUICK_TASK_HOURS } from '../packages/core/matching.mjs';
+import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty, calibrateExperience, EXPERIENCED_HOURS, QUICK_TASK_HOURS, IN_PROGRESS_PENALTY } from '../packages/core/matching.mjs';
 import { createGitHubClient, GitHubApiError } from '../packages/github/client.mjs';
 const example = { title: 'Handle empty arrays in image processing', body: 'Python OpenCV processing', html_url: 'https://github.com/example/vision/issues/42', repository_url: 'https://api.github.com/repos/example/vision', labels: [{ name: 'good first issue' }], updated_at: new Date().toISOString() };
 test('normalization is bounded and rejects invalid modes', () => {
@@ -25,7 +25,9 @@ test('GitHub client builds read-only search request', async () => {
   const paths = [];
   const client = createGitHubClient({ fetchImpl: async (url, init) => { paths.push(url); assert.equal(init.method, undefined); return { ok: true, json: async () => ({ items: [example] }) }; } });
   const result = await client.discover({ mode: 'issues', languages: ['Python'] });
-  assert.equal(paths.length, 1); assert.equal(result.items.length, 1); assert.match(paths[0], /search\/issues/);
+  // One issue search, then one bounded linked-PR lookup for the single issue found.
+  assert.equal(paths.length, 2); assert.equal(result.items.length, 1);
+  assert.match(paths[0], /search\/issues/); assert.match(paths[1], /is%3Apr\+is%3Aopen|is%3Apr%20is%3Aopen/);
 });
 test('rate-limit reports error instead of inventing results', async () => {
   const client = createGitHubClient({ fetchImpl: async () => ({ ok: false, status: 403, headers: { get: () => null } }) });
@@ -80,4 +82,28 @@ test('calibration leaves intermediate users and the existing beginner path uncha
   assert.deepEqual(score(example, { level: 'intermediate', hours: 1 }).calibration, { interestOnly: false, quickTask: false });
   assert.equal(score(example, { level: 'beginner', hours: 4 }).breakdown.accessibility, 20);
   assert.equal(score(advancedIssue, { level: 'beginner', hours: 4 }).breakdown.accessibility, 1);
+});
+
+test('inProgress lowers the score by 15 points and is reported on the result', () => {
+  const issue = { title: 'Fix vision bug', repository_url: 'https://api.github.com/repos/a/b', labels: [{ name: 'good first issue' }], updated_at: new Date().toISOString() };
+  const free = scoreOpportunity(issue, { languages: [], interests: 'vision' });
+  const linked = scoreOpportunity(issue, { languages: [], interests: 'vision' }, null, { inProgress: true });
+  assert.equal(free.inProgress, false);
+  assert.equal(linked.inProgress, true);
+  assert.equal(linked.score, free.score - IN_PROGRESS_PENALTY);
+  assert.equal(IN_PROGRESS_PENALTY, 15);
+  assert.ok(linked.reasons.some(r => /linked open pull request/.test(r)));
+});
+
+test('inProgress=false (or omitted) leaves the score and reasons unchanged', () => {
+  const issue = { title: 'Fix vision bug', repository_url: 'https://api.github.com/repos/a/b', updated_at: new Date().toISOString() };
+  const omitted = scoreOpportunity(issue, { interests: 'vision' });
+  const explicit = scoreOpportunity(issue, { interests: 'vision' }, null, { inProgress: false });
+  assert.deepEqual(explicit, omitted);
+  assert.ok(!omitted.reasons.some(r => /linked open pull request/.test(r)));
+});
+
+test('the in-progress penalty never takes a score below zero', () => {
+  const stale = { title: 'x', repository_url: 'https://api.github.com/repos/a/b', updated_at: '2000-01-01T00:00:00Z' };
+  assert.ok(scoreOpportunity(stale, { languages: ['Rust'] }, null, { inProgress: true }).score >= 0);
 });

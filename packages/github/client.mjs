@@ -4,6 +4,8 @@ const API = 'https://api.github.com';
 const MAX_ROOT_ENTRIES = 200;
 const MAX_RETRIES = 2;
 const BASE_DELAY_MS = 1000;
+/** Linked-PR lookups run at most this many at a time per discover() call. */
+const MAX_PARALLEL_LOOKUPS = 5;
 const realSleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const isRateLimited = status => status === 403 || status === 429;
 
@@ -62,6 +64,33 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined, sleep
     const total = items => items.reduce((sum, item) => sum + scoreOpportunity(item, p).score, 0);
     return fulfilled.reduce((best, items) => (total(items) > total(best) ? items : best));
   }
+  /**
+   * True when an open PR mentions the issue URL in its body. GitHub's `linked:issue` qualifier only filters
+   * PRs linked to *some* issue, so it cannot tell whether this one is covered; the body search can.
+   * One result is enough; request() caches by endpoint, so repeated lookups cost nothing.
+   */
+  async function hasLinkedPullRequest(issue) {
+    const repoName = projectIdFromIssue(issue);
+    const issueUrl = String(issue.html_url || '');
+    if (!repoName || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+$/.test(issueUrl)) return false;
+    const q = `is:pr is:open repo:${repoName} "${issueUrl}" in:body`;
+    const data = await request(`/search/issues?q=${encodeURIComponent(q)}&per_page=1`);
+    return (data.items || []).length > 0;
+  }
+  /** Look up linked PRs with bounded concurrency; a failed lookup means "unknown" and never fails discovery. */
+  async function markLinkedPullRequests(issues, warnings) {
+    const linked = new Set();
+    let failed = 0;
+    const queue = [...issues];
+    const worker = async () => {
+      for (let issue = queue.shift(); issue; issue = queue.shift()) {
+        try { if (await hasLinkedPullRequest(issue)) linked.add(issue); } catch { failed += 1; }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(MAX_PARALLEL_LOOKUPS, issues.length) }, worker));
+    if (failed) warnings.push(`linked pull requests: could not check ${failed} issue${failed === 1 ? '' : 's'}; verify manually.`);
+    return linked;
+  }
   async function discover(preferences, { limit = 12 } = {}) {
     const p = normalizePreferences(preferences);
     const kinds = p.mode === 'all' ? ['repositories', 'issues', 'reviews'] : [p.mode];
@@ -75,11 +104,13 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined, sleep
     });
     if (!raw.length && warnings.length) throw new GitHubApiError(warnings.join(' '), 429);
     const repos = new Map(raw.filter(x => x._kind === 'repositories').map(x => [x.full_name, x]));
+    const linked = await markLinkedPullRequests(raw.filter(x => x._kind === 'issues' && !x.pull_request), warnings);
     const items = raw.map(item => {
       const repoName = projectIdFromIssue(item);
       const repo = repoName ? repos.get(repoName) : item._kind === 'repositories' ? item : null;
-      const result = scoreOpportunity(item, p, repo);
-      return { ...item, _repoName: repoName || item.full_name, _match: result };
+      const inProgress = linked.has(item);
+      const result = scoreOpportunity(item, p, repo, { inProgress });
+      return { ...item, _repoName: repoName || item.full_name, _inProgress: inProgress, _match: result };
     });
     return { items: items.sort((a, b) => b._match.score - a._match.score), warnings,
       searchedKinds: kinds, at: new Date().toISOString(), profile: p };

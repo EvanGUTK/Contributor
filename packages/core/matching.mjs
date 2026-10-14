@@ -52,7 +52,10 @@ export function calibrateExperience(p) {
   };
 }
 
-export function scoreOpportunity(item, preferences = {}, repo = null) {
+/** Score points removed from an issue that already has a linked open PR: still shown, but ranked lower. */
+export const IN_PROGRESS_PENALTY = 15;
+
+export function scoreOpportunity(item, preferences = {}, repo = null, { inProgress = false } = {}) {
   const p = normalizePreferences(preferences);
   const { effectiveLevel, interestOnly, quickTask } = calibrateExperience(p);
   const name = item.name || item.title || '';
@@ -112,8 +115,10 @@ export function scoreOpportunity(item, preferences = {}, repo = null) {
   if (days <= 30) reasons.push('Recent repository activity');
   breakdown.maintainership = repo?.archived || repo?.disabled ? 0 : 7;
   if (repo?.archived) reasons.push('Archived repository: confirm contribution policy');
-  const score = Math.min(100, Object.values(breakdown).reduce((a, b) => a + b, 0));
-  return { score, breakdown, reasons, difficulty, confidence: repo ? 'medium' : 'limited',
+  const base = Math.min(100, Object.values(breakdown).reduce((a, b) => a + b, 0));
+  const score = inProgress ? Math.max(0, base - IN_PROGRESS_PENALTY) : base;
+  if (inProgress) reasons.push('A linked open pull request may already address this issue');
+  return { score, inProgress, breakdown, reasons, difficulty, confidence: repo ? 'medium' : 'limited',
     calibration: { interestOnly, quickTask },
     note: 'Heuristic relevance score, not a prediction of acceptance or skill.' };
 }
