@@ -83,11 +83,19 @@ function errorRedirect(env) {
   return redirect(`${appOrigin(env)}/?auth_error=1`, [cookie(STATE_COOKIE, '', 0)]);
 }
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-  });
+function corsHeaders(env) {
+  return {
+    'Access-Control-Allow-Origin': appOrigin(env),
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+function json(body, status = 200, env = null) {
+  const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  if (env) Object.entries(corsHeaders(env)).forEach(([k, v]) => headers.set(k, v));
+  return new Response(JSON.stringify(body), { status, headers });
 }
 
 function timingSafeEqual(a, b) {
@@ -152,21 +160,25 @@ function handleLogout(env) {
 
 async function handleUser(request, env) {
   const session = await verify(env, readCookie(request, SESSION_COOKIE));
-  if (!session) return json({ authenticated: false }, 401);
+  if (!session) return json({ authenticated: false }, 401, env);
   return json({
     authenticated: true,
     id: session.id,
     login: session.login,
     avatar_url: `https://avatars.githubusercontent.com/u/${session.id}`,
-  });
+  }, 200, env);
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET' } });
+    // Handle CORS preflight for /auth/user
+    if (request.method === 'OPTIONS' && url.pathname === '/auth/user') {
+      return new Response(null, { status: 204, headers: corsHeaders(env) });
+    }
+    if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET, OPTIONS' } });
     try {
-      if (!configured(env)) return url.pathname === '/auth/user' ? json({ authenticated: false }, 401) : errorRedirect(env);
+      if (!configured(env)) return url.pathname === '/auth/user' ? json({ authenticated: false }, 401, env) : errorRedirect(env);
       switch (url.pathname) {
         case '/auth/login': return await handleLogin(env);
         case '/auth/callback': return await handleCallback(request, env, url);
