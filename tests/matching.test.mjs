@@ -25,7 +25,9 @@ test('GitHub client builds read-only search request', async () => {
   const paths = [];
   const client = createGitHubClient({ fetchImpl: async (url, init) => { paths.push(url); assert.equal(init.method, undefined); return { ok: true, json: async () => ({ items: [example] }) }; } });
   const result = await client.discover({ mode: 'issues', languages: ['Python'] });
-  assert.equal(paths.length, 1); assert.equal(result.items.length, 1); assert.match(paths[0], /search\/issues/);
+  // One issue search, then one bounded linked-PR lookup for the single issue found.
+  assert.equal(paths.length, 2); assert.equal(result.items.length, 1);
+  assert.match(paths[0], /search\/issues/); assert.match(paths[1], /is%3Apr\+is%3Aopen|is%3Apr%20is%3Aopen/);
 });
 test('rate-limit reports error instead of inventing results', async () => {
   const client = createGitHubClient({ fetchImpl: async () => ({ ok: false, status: 403, headers: { get: () => null } }) });
