@@ -83,6 +83,35 @@ export function scoreResponsiveness(signals = {}) {
   return { score: clamp(score, 0, 15), label, reasons, note: RESPONSIVENESS_NOTE };
 }
 
+/** Shown whenever a review opportunity looks unlikely to welcome outside reviewers. */
+export const OUTSIDE_REVIEW_DISCLAIMER = 'Outside reviews may not be welcome on this repository. Check CONTRIBUTING.md before commenting.';
+/** Text is flagged as non-English when more than this share of its letters are non-ASCII. */
+export const NON_ENGLISH_RATIO = 0.6;
+
+/** Rough, deterministic check: no language detection, only the share of non-ASCII letters. Empty text is never flagged. */
+export function isMostlyNonEnglish(text) {
+  const letters = String(text ?? '').match(/\p{L}/gu) ?? [];
+  if (!letters.length) return false;
+  const nonAscii = letters.filter(ch => ch.charCodeAt(0) > 127).length;
+  return nonAscii / letters.length > NON_ENGLISH_RATIO;
+}
+
+/**
+ * Flags, never filters: the result stays visible so the UI can warn. Only review opportunities are checked.
+ * Stars come from the repository record; an unknown count is not treated as low.
+ */
+export function assessReviewSafety(item, repo, text) {
+  const welcome = {
+    outsideReviewWelcome: true,
+    disclaimer: null,
+  };
+  if (!item.pull_request) return welcome;
+  const stars = repo?.stargazers_count;
+  const lowStars = Number.isFinite(stars) && stars < REVIEW_MIN_STARS;
+  if (!lowStars && !isMostlyNonEnglish(text)) return welcome;
+  return { outsideReviewWelcome: false, disclaimer: OUTSIDE_REVIEW_DISCLAIMER };
+}
+
 export function scoreOpportunity(item, preferences = {}, repo = null, { inProgress = false, signals = null } = {}) {
   const p = normalizePreferences(preferences);
   const { effectiveLevel, interestOnly, quickTask } = calibrateExperience(p);
@@ -149,7 +178,8 @@ export function scoreOpportunity(item, preferences = {}, repo = null, { inProgre
   const base = Math.min(100, Object.values(breakdown).reduce((a, b) => a + b, 0));
   const score = inProgress ? Math.max(0, base - IN_PROGRESS_PENALTY) : base;
   if (inProgress) reasons.push('A linked open pull request may already address this issue');
-  return { score, inProgress, maintainership, breakdown, reasons, difficulty, confidence: repo ? 'medium' : 'limited',
+  const safetyFlags = assessReviewSafety(item, repo, `${name} ${description}`);
+  return { score, inProgress, maintainership, breakdown, reasons, difficulty, safetyFlags, confidence: repo ? 'medium' : 'limited',
     calibration: { interestOnly, quickTask },
     note: 'Heuristic relevance score, not a prediction of acceptance or skill.' };
 }
