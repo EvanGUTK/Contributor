@@ -8,6 +8,23 @@ const btn = document.querySelector('#find');
 const savedToggle = document.querySelector('#saved-toggle');
 const clearSaved = document.querySelector('#clear-saved');
 const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Issue and PR bodies are raw markdown/HTML. Reduce them to plain text for display; the result is still passed through escape() when rendered.
+const DESCRIPTION_LIMIT = 160;
+function stripMarkdown(text, limit = DESCRIPTION_LIMIT) {
+  const plain = String(text ?? '')
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, ' ')
+    .replace(/```[\s\S]*?(?:```|$)/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<\/?[a-zA-Z][^>]*>/g, ' ')
+    .replace(/^\s{0,3}#{1,6}\s*/gm, ' ')
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    .replace(/\*(?=\S)([^*\n]*?\S)\*/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return plain.length > limit ? `${plain.slice(0, limit - 1).trimEnd()}…` : plain;
+}
 function loadPreferences() {
   // No credentials, private agent history or hidden persistence are stored in this demo.
   try { const saved = JSON.parse(localStorage.getItem('contributor:preferences:v1') || 'null');
@@ -30,7 +47,7 @@ function readSaved() {
 function writeSaved(list) { try { localStorage.setItem(SAVED_KEY, JSON.stringify(list)); return true; } catch { return false; } }
 const isSaved = item => readSaved().some(x => x.html_url === item.html_url);
 function snapshot(item) {
-  const out = { html_url: item.html_url, title: item.title, full_name: item.full_name, _repoName: item._repoName, description: (item.description || item.body || '').replace(/\s+/g, ' ').slice(0, 235), _match: { score: item._match.score, reasons: item._match.reasons.slice(0, 3) }, savedAt: new Date().toISOString() };
+  const out = { html_url: item.html_url, title: item.title, full_name: item.full_name, _repoName: item._repoName, description: stripMarkdown(item.description || item.body || '', 600), _match: { score: item._match.score, reasons: item._match.reasons.slice(0, 3) }, savedAt: new Date().toISOString() };
   if (item.pull_request) out.pull_request = {};
   else if (item.repository_url) out.repository_url = item.repository_url;
   return out;
@@ -48,13 +65,17 @@ function byokNote(item, p) {
   return `<p class="byok-note">Prompt ~${tokens.toLocaleString('en-US')} tokens est. · Your AI provider bills you directly · Contributor charges nothing</p>`;
 }
 function card(item, p, i, saved = false) {
-  const kind = describeOpportunity(item);
+  const kind = describeOpportunity(item).replace(' opportunity', '');
   const match = item._match;
   const repo = item._repoName || item.full_name || 'GitHub';
   const href = /^https:\/\/github\.com\//.test(item.html_url) ? item.html_url : '#';
   const reasons = match.reasons.slice(0, 3).map(r => `<li>${escape(r)}</li>`).join('') || '<li>Matches the selected GitHub search criteria</li>';
-  const summary = (item.description || item.body || '').replace(/\s+/g, ' ').slice(0, 235);
-  return `<article class="result-card"><div class="result-top"><span class="result-kind">${escape(kind)}</span><span class="match" title="Relevance score out of 100, not a success probability"><b>${match.score}</b><small>/100 relevance</small></span></div><h3>${escape(item.title || item.full_name || 'Untitled')}</h3><p class="repo-name">${escape(repo)}</p><p class="result-desc">${escape(summary || 'Open on GitHub to inspect details and contribution requirements.')}</p><ul class="reasons">${reasons}</ul><div class="result-bottom"><a href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>${saved ? `<button type="button" class="remove-saved" data-index="${i}" aria-label="Remove ${escape(item.title || item.full_name || 'opportunity')} from saved">Remove</button>` : `<button type="button" class="save-toggle" data-index="${i}" aria-pressed="${isSaved(item)}">${isSaved(item) ? 'Saved ✓' : 'Save'}</button><button type="button" class="copy-prompt" data-index="${i}">Copy AI prompt <span>↗</span></button>`}</div>${saved ? '' : byokNote(item, p)}</article>`;
+  const summary = stripMarkdown(item.description || item.body || '');
+  const warning = match.safetyFlags?.disclaimer ? `<p class="card-warning">⚠ ${escape(match.safetyFlags.disclaimer)}</p>` : '';
+  const actions = saved
+    ? `<button type="button" class="remove-saved" data-index="${i}" aria-label="Remove ${escape(item.title || item.full_name || 'opportunity')} from saved">Remove</button>`
+    : `<button type="button" class="save-toggle" data-index="${i}" aria-pressed="${isSaved(item)}">${isSaved(item) ? 'Saved ✓' : 'Save'}</button><button type="button" class="copy-prompt" data-index="${i}">Copy prompt <span>↗</span></button>`;
+  return `<article class="result-card" data-index="${i}"><div class="result-top"><span class="result-kind">${escape(kind)}</span><span class="match" title="Relevance score out of 100, not a success probability">${match.score} / 100</span></div><h3>${escape(item.title || item.full_name || 'Untitled')}</h3><p class="repo-name">${escape(repo)}</p><p class="result-desc">${escape(summary || 'Open on GitHub to inspect details and contribution requirements.')}</p><ul class="reasons">${reasons}</ul><div class="card-spacer"></div><div class="result-bottom"><a href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>${actions}</div>${warning}${saved ? '' : byokNote(item, p)}</article>`;
 }
 let lastResults = null;
 let viewingSaved = false;
