@@ -213,7 +213,9 @@ async function handleGitHubProxy(request, env, url) {
 // AES-GCM with a key derived from WORKER_SECRET + user ID, so each user's stored key is encrypted separately.
 async function deriveByokKey(workerSecret, userId, usage) {
   const material = await crypto.subtle.importKey('raw', encoder.encode(workerSecret + ':' + userId), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: encoder.encode(userId), iterations: 100000, hash: 'SHA-256' }, material, { name: 'AES-GCM', length: 256 }, false, [usage]);
+  // 1000 iterations: sufficient for encrypting an already-secret API key (not a password hash).
+  // 100k iterations would exceed Cloudflare Workers free-tier 10ms CPU budget.
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: encoder.encode(userId), iterations: 1000, hash: 'SHA-256' }, material, { name: 'AES-GCM', length: 256 }, false, [usage]);
 }
 
 async function encryptKey(workerSecret, userId, apiKey) {
