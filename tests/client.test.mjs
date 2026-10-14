@@ -334,3 +334,34 @@ test('getResponsivenessSignals output feeds scoreResponsiveness', async () => {
   assert.equal(result.score, 10); // 8 + 5 - 3
   assert.ok(result.reasons.includes('high open issue backlog'));
 });
+
+test('proxyBase routes requests through the Worker with credentials and no browser-side token headers', async () => {
+  const calls = [];
+  const client = createGitHubClient({ proxyBase: 'https://proxy.test/api/github', token: 'ignored-token', fetchImpl: async (url, options) => {
+    calls.push({ url, options });
+    return reply({ full_name: 'a/b' });
+  } });
+  await client.getRepo('a', 'b');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `https://proxy.test/api/github?path=${encodeURIComponent('/repos/a/b')}`);
+  assert.equal(calls[0].options.credentials, 'include');
+  assert.equal(calls[0].options.headers.Authorization, undefined);
+  assert.equal(calls[0].options.headers['X-GitHub-Api-Version'], undefined);
+});
+
+test('proxyBase percent-encodes the whole endpoint including its query string', async () => {
+  const urls = [];
+  const client = createGitHubClient({ proxyBase: 'https://proxy.test/api/github', fetchImpl: async url => { urls.push(url); return reply({ items: [] }); } });
+  await client.request('/search/issues?q=a%20b&per_page=1');
+  const parsed = new URL(urls[0]);
+  assert.equal(parsed.searchParams.get('path'), '/search/issues?q=a%20b&per_page=1');
+});
+
+test('without proxyBase requests still go straight to api.github.com without credentials mode', async () => {
+  const calls = [];
+  const client = createGitHubClient({ fetchImpl: async (url, options) => { calls.push({ url, options }); return reply({ full_name: 'a/b' }); } });
+  await client.getRepo('a', 'b');
+  assert.equal(calls[0].url, 'https://api.github.com/repos/a/b');
+  assert.equal(calls[0].options.credentials, undefined);
+  assert.equal(calls[0].options.headers['X-GitHub-Api-Version'], '2022-11-28');
+});

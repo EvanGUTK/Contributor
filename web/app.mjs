@@ -1,6 +1,10 @@
 import { normalizePreferences, buildHandoffPrompt, describeOpportunity } from './lib/matching.mjs';
 import { createGitHubClient } from './lib/github.mjs';
-const client = createGitHubClient();
+// Direct anonymous calls by default; initAuth() sets proxyClient once a signed-in session is confirmed.
+// A failed proxy search clears proxyClient so later searches go direct.
+const directClient = createGitHubClient();
+let proxyClient = null;
+let proxyNote = '';
 const form = document.querySelector('#search-form');
 const resultRoot = document.querySelector('#results');
 const status = document.querySelector('#status');
@@ -236,9 +240,15 @@ form.addEventListener('submit', async event => {
   event.preventDefault(); const p = preferences(); btn.disabled = true; btn.textContent = 'Searching GitHub…';
   status.textContent = 'Searching live GitHub repositories, issues and pull requests…'; resultRoot.replaceChildren(); lastResults = null; viewingSaved = false; updateSavedBar();
   try {
-    const result = await client.discover(p, { limit: 10 });
+    let result;
+    if (proxyClient) {
+      // discover() rewrites upstream failures (a proxy 401 included) into its own error, so don't inspect status codes: any proxy failure falls back to direct calls once.
+      try { result = await proxyClient.discover(p, { limit: 10 }); }
+      catch { proxyClient = null; proxyNote = 'Enhanced rate limits unavailable; sign in again to restore them.'; }
+    }
+    if (!result) result = await directClient.discover(p, { limit: 10 });
     const items = result.items.slice(0, 24);
-    status.textContent = `${items.length} relevant public opportunities · Updated ${new Date(result.at).toLocaleTimeString()} · Scores indicate relevance, not success probability.${result.warnings.length ? ` Partial results: ${result.warnings.join('; ')}` : ''}`;
+    status.textContent = `${items.length} relevant public opportunities · Updated ${new Date(result.at).toLocaleTimeString()} · Scores indicate relevance, not success probability.${result.warnings.length ? ` Partial results: ${result.warnings.join('; ')}` : ''}${proxyNote ? ` ${proxyNote}` : ''}`;
     if (!items.length) { resultRoot.innerHTML = '<div class="empty">No current matches. Try a different language, topic or discovery mode.</div>'; return; }
     lastResults = { items, p }; viewingSaved = false; renderView();
     try { if (form.elements.remember.checked) localStorage.setItem('contributor:preferences:v1', JSON.stringify(p)); else localStorage.removeItem('contributor:preferences:v1'); } catch {}
@@ -251,6 +261,7 @@ form.addEventListener('submit', async event => {
 // Optional GitHub sign-in. The Worker owns the session cookie; this only reads the public identity.
 // Any failure (Worker down, blocked, bad payload) leaves the auth UI hidden: sign-in is never required.
 const AUTH_BASE = 'https://contributor-auth.evan-workspace.workers.dev';
+const PROXY_BASE = `${AUTH_BASE}/api/github`;
 const AVATAR_PREFIX = 'https://avatars.githubusercontent.com/';
 async function initAuth() {
   const root = document.querySelector('#auth');
@@ -271,6 +282,11 @@ async function initAuth() {
     if (typeof user.avatar_url === 'string' && user.avatar_url.startsWith(AVATAR_PREFIX)) avatar.src = user.avatar_url; else avatar.hidden = true;
     document.querySelector('#signout').href = `${AUTH_BASE}/auth/logout`;
     userBox.hidden = false; root.hidden = false;
+    // Signed in: route GitHub calls through the Worker, which attaches the session's token (5000 req/hr instead of 60).
+    proxyClient = createGitHubClient({ proxyBase: PROXY_BASE });
+    proxyNote = `✓ Signed in as ${user.login} · Enhanced rate limits active`;
+    // Don't clobber a search that finished or started while the sign-in check was in flight.
+    if (!lastResults && !btn.disabled) status.textContent = proxyNote;
   } catch {}
 }
 initAuth();
