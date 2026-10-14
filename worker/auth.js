@@ -1,7 +1,7 @@
 // Contributor auth Worker: GitHub App read-only login (server-side OAuth code flow).
 // All secrets come from the Worker environment: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, WORKER_SECRET.
-// The GitHub access token is used once to read the public identity and is then discarded;
-// it is never stored, logged, or sent to the browser.
+// The GitHub access token lives only inside the HMAC-signed, HttpOnly session cookie. It is never stored
+// server-side, logged, or sent to the browser in a response body; /api/github uses it to proxy API calls.
 
 const SESSION_COOKIE = 'contributor_session';
 const STATE_COOKIE = 'contributor_oauth_state';
@@ -11,6 +11,9 @@ const DEFAULT_APP_ORIGIN = 'https://contributor-7cw.pages.dev';
 const GITHUB_AUTHORIZE_URL = 'https://github.com/login/oauth/authorize';
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
+const GITHUB_API_URL = 'https://api.github.com';
+// Upstream headers the browser may read; everything else (cookies, tokens) is dropped.
+const PROXY_RESPONSE_HEADERS = ['content-type', 'etag', 'link', 'x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-reset', 'x-ratelimit-resource'];
 
 const encoder = new TextEncoder();
 
@@ -88,7 +91,8 @@ function corsHeaders(env) {
     'Access-Control-Allow-Origin': appOrigin(env),
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, If-None-Match',
+    'Access-Control-Expose-Headers': PROXY_RESPONSE_HEADERS.join(', '),
   };
 }
 
@@ -149,8 +153,8 @@ async function handleCallback(request, env, url) {
   const user = await userResponse.json();
   if (!Number.isInteger(user.id) || typeof user.login !== 'string') return errorRedirect(env);
 
-  // Only the numeric id and login are kept; the access token goes out of scope here.
-  const session = await sign(env, { id: user.id, login: user.login, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS });
+  // The token rides in the signed cookie so /api/github can authenticate calls; the signature prevents tampering.
+  const session = await sign(env, { id: user.id, login: user.login, token: accessToken, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS });
   return redirect(`${appOrigin(env)}/`, [cookie(SESSION_COOKIE, session, SESSION_TTL_SECONDS), cookie(STATE_COOKIE, '', 0)]);
 }
 
@@ -169,25 +173,56 @@ async function handleUser(request, env) {
   }, 200, env);
 }
 
+// A proxied path must be an absolute API path: no host override, no traversal, no encoded traversal.
+function validProxyPath(path) {
+  return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') && !path.includes('..') && !/%2e/i.test(path) && !/[\\\s]/.test(path);
+}
+
+// 1:1 pass-through of a GitHub REST call using the token from the signed session; nothing is stored.
+async function handleGitHubProxy(request, env, url) {
+  const session = await verify(env, readCookie(request, SESSION_COOKIE));
+  if (!session || typeof session.token !== 'string' || !session.token) return json({ error: 'not_authenticated' }, 401, env);
+  const path = url.searchParams.get('path');
+  if (!validProxyPath(path)) return json({ error: 'invalid_path' }, 400, env);
+  const headers = {
+    Authorization: `Bearer ${session.token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'contributor-auth',
+  };
+  const etag = request.headers.get('If-None-Match');
+  if (etag) headers['If-None-Match'] = etag;
+  const upstream = await fetch(`${GITHUB_API_URL}${path}`, { headers });
+  const out = new Headers({ 'Cache-Control': 'no-store' });
+  for (const name of PROXY_RESPONSE_HEADERS) {
+    const value = upstream.headers.get(name);
+    if (value) out.set(name, value);
+  }
+  Object.entries(corsHeaders(env)).forEach(([k, v]) => out.set(k, v));
+  return new Response(upstream.body, { status: upstream.status, headers: out });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    // Handle CORS preflight for /auth/user
-    if (request.method === 'OPTIONS' && url.pathname === '/auth/user') {
+    // Handle CORS preflight for the credentialed JSON endpoints
+    if (request.method === 'OPTIONS' && (url.pathname === '/auth/user' || url.pathname === '/api/github')) {
       return new Response(null, { status: 204, headers: corsHeaders(env) });
     }
     if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET, OPTIONS' } });
     try {
-      if (!configured(env)) return url.pathname === '/auth/user' ? json({ authenticated: false }, 401, env) : errorRedirect(env);
+      if (!configured(env)) return url.pathname === '/auth/user' ? json({ authenticated: false }, 401, env) : url.pathname === '/api/github' ? json({ error: 'not_authenticated' }, 401, env) : errorRedirect(env);
       switch (url.pathname) {
         case '/auth/login': return await handleLogin(env);
         case '/auth/callback': return await handleCallback(request, env, url);
         case '/auth/logout': return handleLogout(env);
         case '/auth/user': return await handleUser(request, env);
+        case '/api/github': return await handleGitHubProxy(request, env, url);
         default: return new Response('Not Found', { status: 404 });
       }
     } catch {
       // Never expose error details to the browser.
+      if (url.pathname === '/api/github') return json({ error: 'upstream_unavailable' }, 502, env);
       return url.pathname === '/auth/user' ? json({ authenticated: false }, 401) : errorRedirect(env);
     }
   },
