@@ -161,8 +161,10 @@ function detailHtml(item) {
     ${labels.length ? `<div class="labels">${labels.map(l => `<span class="badge">${escape(l)}</span>`).join('')}</div>` : ''}
     <div class="panel-section"><h4>Description</h4><p>${escape(description || 'No description provided. Open on GitHub to inspect details.')}</p></div>
     ${reasons ? `<div class="panel-section"><h4>Why it matches</h4><ul class="reasons">${reasons}</ul></div>` : ''}
+    <div class="panel-section panel-explain" id="panel-explain"></div>
     ${warning}${notes.map(n => `<p class="panel-note">${escape(n)}</p>`).join('')}
     <div class="panel-section panel-similar" id="panel-similar" hidden></div>
+    ${kind === 'Issue' && validOwner && /^[\w.-]+$/.test(name) ? `<div class="panel-section panel-starter" id="panel-starter"><h4><button type="button" class="starter-toggle" id="starter-toggle" aria-expanded="false" aria-controls="starter-body"><span class="starter-chevron" aria-hidden="true">▶</span> Starter Pack</button></h4><div class="starter-body" id="starter-body"></div></div>` : ''}
     <div class="panel-actions"><a class="btn btn-primary" href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a><button type="button" class="btn btn-text" id="panel-copy">Copy AI prompt</button></div>`;
 }
 // Count a number up from 0 with an ease-out curve. The final value is already in the markup, so skipping is safe.
@@ -212,11 +214,196 @@ async function loadSimilar(item, p) {
     root.hidden = false;
   } catch {}
 }
+// BYOK match explanation. The key stays in this browser's localStorage and is sent only to the user's own AI provider,
+// never to a Contributor server. It is never logged or rendered; the UI shows the last 4 characters at most.
+const BYOK_KEY = 'contributor:byok:key';
+const EXPLAIN_ERROR = 'Could not explain — check your API key or try again.';
+let explainRequest = 0;
+function readByokKey() { try { return localStorage.getItem(BYOK_KEY) || ''; } catch { return ''; } }
+function writeByokKey(key) { try { localStorage.setItem(BYOK_KEY, key); return true; } catch { return false; } }
+const maskKey = key => `••••${key.slice(-4)}`;
+const isAnthropicKey = key => key.startsWith('sk-ant-');
+function buildExplainPrompt(item, prefs) {
+  const list = value => Array.isArray(value) ? value.join(', ') : String(value ?? '');
+  const kind = describeOpportunity(item).replace(' opportunity', '').toLowerCase();
+  return `In 2 sentences, explain why this GitHub ${kind} is a good match for someone with these preferences: languages: ${list(prefs.languages)}, interests: ${list(prefs.interests)}, level: ${prefs.level}. Issue: ${item.title || item.full_name} in ${item._repoName || item.full_name}. Be specific and encouraging.`;
+}
+// Direct browser call to the provider. Errors carry only the HTTP status, never the request headers.
+async function requestExplanation(key, prompt) {
+  const messages = [{ role: 'user', content: prompt }];
+  const anthropic = isAnthropicKey(key);
+  const res = anthropic
+    ? await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal: AbortSignal.timeout(20000),
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 120, messages }),
+    })
+    : await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST', signal: AbortSignal.timeout(20000),
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 120, messages }),
+    });
+  if (!res.ok) throw new Error(`Provider responded ${res.status}`);
+  const data = await res.json();
+  const text = anthropic
+    ? (Array.isArray(data?.content) ? data.content : []).filter(x => x?.type === 'text').map(x => x.text).join('')
+    : data?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string' || !text.trim()) throw new Error('Empty explanation');
+  return text.trim();
+}
+function initExplain(item, p) {
+  const root = panelBody.querySelector('#panel-explain');
+  if (!root) return;
+  const prefs = p || preferences();
+  root.innerHTML = `<h4>AI explanation</h4>
+    <div class="explain-row"><button type="button" class="btn btn-text explain-btn" id="explain-btn">✦ Explain this match</button><span class="byok-key" id="byok-key"></span></div>
+    <form class="byok-form" id="byok-form" hidden autocomplete="off">
+      <label for="byok-input">OpenAI or Anthropic API key</label>
+      <input id="byok-input" type="password" placeholder="sk-... or sk-ant-..." spellcheck="false" autocapitalize="off" />
+      <p class="byok-help" id="byok-help">Stored locally in your browser. Never sent to Contributor servers.</p>
+      <div class="byok-form-actions"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn btn-text" id="byok-cancel">Cancel</button></div>
+    </form>
+    <div class="explain-output" id="explain-output" aria-live="polite"></div>
+    <p class="explain-disclaimer">Explanation generated by your AI provider. Contributor charges nothing.</p>`;
+  const explainBtn = root.querySelector('#explain-btn');
+  const keyStatus = root.querySelector('#byok-key');
+  const keyForm = root.querySelector('#byok-form');
+  const keyInput = root.querySelector('#byok-input');
+  const keyHelp = root.querySelector('#byok-help');
+  const output = root.querySelector('#explain-output');
+  let explainAfterSave = false;
+  function showKeyStatus() {
+    const key = readByokKey();
+    keyStatus.innerHTML = key ? `${escape(maskKey(key))} · <button type="button" class="link-btn" id="byok-change">Change</button>` : '';
+    keyStatus.querySelector('#byok-change')?.addEventListener('click', () => openKeyForm(false));
+  }
+  function openKeyForm(thenExplain) {
+    explainAfterSave = thenExplain;
+    keyHelp.textContent = 'Stored locally in your browser. Never sent to Contributor servers.';
+    keyHelp.classList.remove('byok-invalid');
+    keyForm.hidden = false;
+    keyInput.focus();
+  }
+  function closeKeyForm() { keyInput.value = ''; keyForm.hidden = true; }
+  async function explain() {
+    const key = readByokKey();
+    if (!key) { openKeyForm(true); return; }
+    const request = ++explainRequest;
+    explainBtn.disabled = true;
+    explainBtn.setAttribute('aria-busy', 'true');
+    output.innerHTML = '<p class="explain-loading"><span class="spinner" aria-hidden="true"></span> Asking your AI provider…</p>';
+    let html;
+    try { html = `<blockquote class="explain-quote">${escape(await requestExplanation(key, buildExplainPrompt(item, prefs)))}</blockquote>`; }
+    catch { html = `<p class="explain-error">${EXPLAIN_ERROR}</p>`; }
+    if (request !== explainRequest || !root.isConnected) return; // the panel moved on to another item
+    output.innerHTML = html;
+    explainBtn.disabled = false;
+    explainBtn.removeAttribute('aria-busy');
+  }
+  explainBtn.addEventListener('click', explain);
+  root.querySelector('#byok-cancel').addEventListener('click', () => { closeKeyForm(); explainBtn.focus(); });
+  keyForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const key = keyInput.value.trim();
+    if (!key.startsWith('sk-')) {
+      keyHelp.textContent = 'Enter an OpenAI (sk-…) or Anthropic (sk-ant-…) API key.';
+      keyHelp.classList.add('byok-invalid');
+      return;
+    }
+    if (!writeByokKey(key)) { keyHelp.textContent = 'Saving unavailable: this browser blocked local storage.'; keyHelp.classList.add('byok-invalid'); return; }
+    closeKeyForm();
+    showKeyStatus();
+    explainBtn.focus();
+    if (explainAfterSave) explain();
+  });
+  showKeyStatus();
+}
+// Contribution starter pack for issues: a setup checklist inferred from the repo's root files and up to 3 recently
+// merged PRs. Both are read-only GitHub calls made only when the section is first expanded; failures degrade silently.
+const MERGED_PR_LIMIT = 3;
+let starterRequest = 0;
+// Signed-in users read through the proxy (higher rate limit); any proxy failure retries once with direct anonymous calls.
+async function githubRead(read) {
+  if (proxyClient) { try { return await read(proxyClient); } catch {} }
+  return read(directClient);
+}
+function setupChecklist(files, repoUrl, issueUrl) {
+  const names = new Set((files || []).map(f => String(f?.name || '').toLowerCase()));
+  const steps = [`Clone the repo: <code>git clone ${escape(repoUrl)}</code>`];
+  if (names.has('package.json')) steps.push('Install deps: <code>npm install</code>');
+  if (names.has('requirements.txt')) steps.push('Install deps: <code>pip install -r requirements.txt</code>');
+  else if (names.has('pyproject.toml')) steps.push('Install deps: <code>pip install -e .</code>');
+  if (names.has('cargo.toml')) steps.push('Build: <code>cargo build</code>');
+  if (names.has('makefile')) steps.push('Run: <code>make</code>');
+  if (names.has('contributing.md')) steps.push(`Read <a href="${escape(repoUrl)}/blob/HEAD/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">CONTRIBUTING.md ↗</a>`);
+  steps.push(`Find the issue: <a href="${escape(issueUrl)}" target="_blank" rel="noopener noreferrer">${escape(issueUrl.replace('https://github.com/', ''))} ↗</a>`);
+  return `<ul class="starter-checklist">${steps.map(s => `<li><label><input type="checkbox" /><span>${s}</span></label></li>`).join('')}</ul>`;
+}
+function mergedPrList(pulls) {
+  const merged = (Array.isArray(pulls) ? pulls : [])
+    .filter(pr => pr?.merged_at && typeof pr.html_url === 'string' && /^https:\/\/github\.com\//.test(pr.html_url))
+    .slice(0, MERGED_PR_LIMIT);
+  if (!merged.length) return '<p class="starter-empty">No recently merged PRs found.</p>';
+  return `<ul class="starter-prs">${merged.map(pr => `<li><a href="${escape(pr.html_url)}" target="_blank" rel="noopener noreferrer">${escape(pr.title || 'Untitled')}</a> <span class="starter-when">· merged ${escape(relativeTime(pr.merged_at))}</span></li>`).join('')}</ul>`;
+}
+async function loadStarterPack(body, owner, name, issueUrl) {
+  const request = ++starterRequest;
+  const repoUrl = `https://github.com/${owner}/${name}`;
+  body.innerHTML = `<div class="starter-inner"><h5>Setup checklist</h5><div id="starter-setup"><p class="starter-empty">Loading…</p></div><div id="starter-prs-section"><h5>Example merged PRs</h5><div id="starter-prs"><p class="starter-empty">Loading…</p></div></div></div>`;
+  const stale = () => request !== starterRequest || !body.isConnected; // the panel moved on to another item
+  // Each half renders as soon as its own request settles. Without a file listing the checklist still offers the steps that need no repo knowledge.
+  githubRead(client => client.getRepoFiles(owner, name)).catch(() => null).then(files => {
+    if (!stale()) body.querySelector('#starter-setup').innerHTML = setupChecklist(files, repoUrl, issueUrl);
+  });
+  // sort=updated defaults to ascending, so ask for newest first explicitly.
+  githubRead(client => client.request(`/repos/${owner}/${name}/pulls?state=closed&sort=updated&direction=desc&per_page=10`)).then(
+    pulls => { if (!stale()) body.querySelector('#starter-prs').innerHTML = mergedPrList(pulls); },
+    () => { if (!stale()) body.querySelector('#starter-prs-section')?.remove(); },
+  );
+}
+// max-height animates between 0 and the measured content height, then lifts the cap so content loaded later is never clipped.
+function setStarterOpen(body, open) {
+  body.style.maxHeight = `${body.scrollHeight}px`;
+  if (open) {
+    body.classList.add('open');
+    // No motion, or nothing to animate (transitionend would never fire): show at full height straight away.
+    if (!okToAnimate() || !body.scrollHeight) { body.style.maxHeight = 'none'; return; }
+    body.addEventListener('transitionend', function done(event) {
+      if (event.target !== body || event.propertyName !== 'max-height') return;
+      body.removeEventListener('transitionend', done);
+      if (body.classList.contains('open')) body.style.maxHeight = 'none';
+    });
+  } else {
+    void body.offsetHeight; // commit the measured height so the collapse animates from it
+    body.classList.remove('open');
+    body.style.maxHeight = '0px';
+  }
+}
+function initStarterPack(item) {
+  const toggle = panelBody.querySelector('#starter-toggle');
+  const body = panelBody.querySelector('#starter-body');
+  if (!toggle || !body) return;
+  const [owner, name] = String(item._repoName || '').split('/');
+  let loaded = false;
+  toggle.addEventListener('click', () => {
+    const open = toggle.getAttribute('aria-expanded') !== 'true';
+    toggle.setAttribute('aria-expanded', String(open));
+    // Load first so the Loading… placeholders give setStarterOpen() a height to animate to.
+    if (open && !loaded) {
+      loaded = true;
+      const issueUrl = /^https:\/\/github\.com\//.test(item.html_url) ? item.html_url : `https://github.com/${owner}/${name}/issues`;
+      loadStarterPack(body, owner, name, issueUrl);
+    }
+    setStarterOpen(body, open);
+  });
+}
 function openPanel(item, p) {
   panelReturnFocus = document.activeElement;
   panelBody.innerHTML = detailHtml(item);
   animateCount(panelBody.querySelector('.panel-score'), Number(item._match.score));
   loadSimilar(item, p);
+  initExplain(item, p);
+  initStarterPack(item);
   panel.setAttribute('aria-labelledby', 'panel-title');
   panel.removeAttribute('aria-label');
   panelBackdrop.hidden = false;
@@ -243,7 +430,8 @@ document.addEventListener('keydown', event => {
   if (!panel.classList.contains('open')) return;
   if (event.key === 'Escape') { closePanel(); return; }
   if (event.key !== 'Tab') return;
-  const focusable = [...panel.querySelectorAll('a[href], button')];
+  // Skip controls inside hidden or collapsed sections: they cannot take focus, so they must not anchor the trap.
+  const focusable = [...panel.querySelectorAll('a[href], button, input')].filter(el => !el.disabled && !el.closest('[hidden]') &&getComputedStyle(el).visibility !== 'hidden');
   const first = focusable[0], last = focusable[focusable.length - 1];
   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
