@@ -30,7 +30,7 @@ Prioritize verified usefulness over polishing an empty AI dashboard. Tasks are d
 
 ## Gate 2 — GitHub App and account layer
 
-- [x] GitHub App registration and OAuth user-to-server callback with PKCE/state (Worker deployed, login functional).
+- [x] GitHub App registration and OAuth user-to-server callback with state param (PKCE not implemented — server-side flow; Worker deployed, login functional).
 - [ ] Narrow read-only permissions; no write by default, short-lived tokens and user-revoke behavior.
 - [ ] Signed cookie/session and durable user identity by GitHub numeric ID.
 - [ ] Delete/export profile, privacy notice, data retention limits.
@@ -50,7 +50,7 @@ Prioritize verified usefulness over polishing an empty AI dashboard. Tasks are d
 
 ## Gate 4 — Extension and contribution lifecycle
 
-- [x] Manifest V3 browser extension scaffold (issue-page badge; no network access).
+- [x] Manifest V3 browser extension scaffold with an issue-page badge (current capabilities: see `extension/README.md`).
 - [ ] WXT browser extension displays match reasoning on GitHub pages.
 - [x] Static cost-free deployment certification (`npm run verify:deploy`).
 - [ ] Watchlist, stale issue detection, notifications, follow-up tracking.
