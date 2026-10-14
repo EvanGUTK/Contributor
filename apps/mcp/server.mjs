@@ -5,6 +5,7 @@ import * as z from 'zod/v4';
 import { createGitHubClient } from '../../packages/github/client.mjs';
 import { normalizePreferences, buildHandoffPrompt, scoreOpportunity } from '../../packages/core/matching.mjs';
 import { getPassportSummary } from '../../packages/core/passport.mjs';
+import { buildReviewChecklist } from '../../packages/core/review-coach.mjs';
 import { validateConsentPreferences, buildConsentSummary } from '../../packages/core/memory-consent.mjs';
 
 const client = createGitHubClient({ token: process.env.CONTRIBUTOR_GITHUB_TOKEN || undefined });
@@ -104,6 +105,17 @@ function createServer() {
         additions: pr.additions, deletions: pr.deletions, description_excerpt: (pr.body || '').slice(0, 3500), base_sha: pr.base?.sha, head_sha: pr.head?.sha },
       firstPageFiles: files.map(x => ({ filename: x.filename, status: x.status, additions: x.additions, deletions: x.deletions, patch_excerpt: (x.patch || '').slice(0, 1200) })),
       truncated: pr.changed_files > 30, nextStep: 'Independently verify any suspected bug and draft review comments. The user approves exact comments before publishing.' };
+  }));
+  server.registerTool('prepare_review_checklist', {
+    description: 'Generate a structured review checklist for a PR the user has selected. Does not post to GitHub. User must verify all findings before publishing any comment.',
+    inputSchema: z.object({ owner: ownerSchema, repo: repoSchema, number: issueSchema })
+  }, safe(async ({ owner, repo, number }) => {
+    const pr = await client.request(`/repos/${owner}/${repo}/pulls/${number}`);
+    const files = await client.request(`/repos/${owner}/${repo}/pulls/${number}/files?per_page=30`);
+    const truncated = pr.changed_files > files.length;
+    const checklist = buildReviewChecklist({ title: pr.title, body: pr.body, changed_files: pr.changed_files, additions: pr.additions, deletions: pr.deletions }, files);
+    return { pr: { title: pr.title, url: pr.html_url, state: pr.state, draft: pr.draft, head_sha: pr.head?.sha }, ...checklist, truncated,
+      ...(truncated && { truncationNote: `Only the first ${files.length} of ${pr.changed_files} changed files were analyzed. Review the remaining files on GitHub before relying on this checklist.` }) };
   }));
   server.registerTool('prepare_contribution', {
     description: 'Generate a grounded, approval-first prompt for an opportunity the user has chosen. Never writes GitHub data.',
