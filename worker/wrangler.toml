@@ -13,3 +13,9 @@ compatibility_date = "2026-10-14"
 # Public, non-secret setting: where the Worker redirects users after login/logout.
 [vars]
 APP_ORIGIN = "https://contributor-7cw.pages.dev"
+
+# Encrypted BYOK AI provider keys (AES-GCM, per-user key derived from WORKER_SECRET), keyed by GitHub user ID.
+# Create with: wrangler kv namespace create BYOK_KEYS — replace id with the returned id
+[[kv_namespaces]]
+binding = "BYOK_KEYS"
+id = "PLACEHOLDER_KV_ID"

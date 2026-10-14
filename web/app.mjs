@@ -214,48 +214,148 @@ async function loadSimilar(item, p) {
     root.hidden = false;
   } catch {}
 }
-// BYOK match explanation. The key stays in this browser's localStorage and is sent only to the user's own AI provider,
-// never to a Contributor server. It is never logged or rendered; the UI shows the last 4 characters at most.
-const BYOK_KEY = 'contributor:byok:key';
+// BYOK match explanation (requires GitHub sign-in). The key goes from the input field straight to the Worker's
+// /api/byok/save, which stores it encrypted server-side and makes the provider call; the browser never stores,
+// receives or renders it. Only { hasKey, provider } comes back.
 const EXPLAIN_ERROR = 'Could not explain — check your API key or try again.';
+const EXPLAIN_PROMPT_LIMIT = 500;
+const PROVIDER_NAMES = { openai: 'OpenAI', anthropic: 'Anthropic' };
 let explainRequest = 0;
-function readByokKey() { try { return localStorage.getItem(BYOK_KEY) || ''; } catch { return ''; } }
-function writeByokKey(key) { try { localStorage.setItem(BYOK_KEY, key); return true; } catch { return false; } }
-const maskKey = key => `••••${key.slice(-4)}`;
-const isAnthropicKey = key => key.startsWith('sk-ant-');
-function buildExplainPrompt(item, prefs) {
-  const list = value => Array.isArray(value) ? value.join(', ') : String(value ?? '');
-  const kind = describeOpportunity(item).replace(' opportunity', '').toLowerCase();
-  return `In 2 sentences, explain why this GitHub ${kind} is a good match for someone with these preferences: languages: ${list(prefs.languages)}, interests: ${list(prefs.interests)}, level: ${prefs.level}. Issue: ${item.title || item.full_name} in ${item._repoName || item.full_name}. Be specific and encouraging.`;
+// { hasKey, provider } for the signed-in user once /api/byok/status answers; null while unknown.
+let byokStatus = null;
+// Re-renders the open panel's key status when byokStatus changes; replaced by each initExplain().
+let onByokStatus = () => {};
+// Keys saved by the earlier localStorage implementation are purged on load.
+try { localStorage.removeItem('contributor:byok:key'); } catch {}
+async function byokFetch(path, { method = 'GET', body } = {}) {
+  const headers = { Accept: 'application/json' };
+  if (body) headers['Content-Type'] = 'application/json';
+  const res = await fetch(`${AUTH_BASE}/api/byok/${path}`, { method, credentials: 'include', headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(25000) });
+  return { ok: res.ok, status: res.status, data: await res.json().catch(() => null) };
 }
-// Direct browser call to the provider. Errors carry only the HTTP status, never the request headers.
-async function requestExplanation(key, prompt) {
-  const messages = [{ role: 'user', content: prompt }];
-  const anthropic = isAnthropicKey(key);
-  const res = anthropic
-    ? await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', signal: AbortSignal.timeout(20000),
-      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 120, messages }),
-    })
-    : await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST', signal: AbortSignal.timeout(20000),
-      headers: { 'content-type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 120, messages }),
-    });
-  if (!res.ok) throw new Error(`Provider responded ${res.status}`);
-  const data = await res.json();
-  const text = anthropic
-    ? (Array.isArray(data?.content) ? data.content : []).filter(x => x?.type === 'text').map(x => x.text).join('')
-    : data?.choices?.[0]?.message?.content;
-  if (typeof text !== 'string' || !text.trim()) throw new Error('Empty explanation');
-  return text.trim();
+async function loadByokStatus() {
+  try {
+    const { ok, data } = await byokFetch('status');
+    byokStatus = ok && typeof data?.hasKey === 'boolean' ? { hasKey: data.hasKey, provider: data.provider ?? null } : null;
+  } catch { byokStatus = null; }
+  onByokStatus();
+  return byokStatus;
+}
+function buildExplainPrompt(item, prefs) {
+  const list = value => (Array.isArray(value) ? value.join(', ') : String(value ?? '')).slice(0, 80);
+  const kind = describeOpportunity(item).replace(' opportunity', '').toLowerCase();
+  const title = String(item.title || item.full_name || '').slice(0, 120);
+  const repo = String(item._repoName || item.full_name || '').slice(0, 100);
+  // The Worker rejects prompts over EXPLAIN_PROMPT_LIMIT characters.
+  return `In 2 sentences, explain why this GitHub ${kind} is a good match for someone with these preferences: languages: ${list(prefs.languages)}, interests: ${list(prefs.interests)}, level: ${prefs.level}. Issue: ${title} in ${repo}. Be specific and encouraging.`.slice(0, EXPLAIN_PROMPT_LIMIT);
 }
 function initExplain(item, p) {
   const root = panelBody.querySelector('#panel-explain');
   if (!root) return;
-  // AI explanation temporarily unavailable while upgrading to secure server-side key storage.
-  root.innerHTML = `<div class="explain-maintenance"><span>✦ AI explanation</span><p>Coming soon — upgrading to secure server-side key storage. <a href="https://github.com/EvanGUTK/Contributor/issues/72" target="_blank" rel="noopener noreferrer">Track progress ↗</a></p></div>`;
+  const prefs = p || preferences();
+  root.innerHTML = `<h4>AI explanation</h4>
+    <div class="explain-row"><button type="button" class="btn btn-text explain-btn" id="explain-btn">✦ Explain this match</button><span class="byok-key" id="byok-key"></span></div>
+    <form class="byok-form" id="byok-form" hidden autocomplete="off">
+      <label for="byok-input">OpenAI or Anthropic API key</label>
+      <input id="byok-input" type="password" placeholder="sk-... or sk-ant-..." spellcheck="false" autocapitalize="off" />
+      <p class="byok-help" id="byok-help"></p>
+      <div class="byok-form-actions"><button type="submit" class="btn btn-primary" id="byok-save">Save</button><button type="button" class="btn btn-text" id="byok-cancel">Cancel</button></div>
+    </form>
+    <div class="explain-output" id="explain-output" aria-live="polite"></div>
+    <p class="explain-disclaimer">Explanation generated by your AI provider. Contributor charges nothing.</p>`;
+  const explainBtn = root.querySelector('#explain-btn');
+  const keyStatus = root.querySelector('#byok-key');
+  const keyForm = root.querySelector('#byok-form');
+  const keyInput = root.querySelector('#byok-input');
+  const keyHelp = root.querySelector('#byok-help');
+  const saveBtn = root.querySelector('#byok-save');
+  const output = root.querySelector('#explain-output');
+  const KEY_HELP = 'Sent once over HTTPS to Contributor’s sign-in Worker, stored encrypted for 30 days and never returned to your browser. Your AI provider bills you directly.';
+  const signInHtml = `<p class="byok-signin">Sign in with GitHub to use AI explanations. <a href="${escape(AUTH_BASE)}/auth/login">Sign in →</a></p>`;
+  let explainAfterSave = false;
+  function showKeyStatus() {
+    if (!root.isConnected) return;
+    if (!signedIn) { keyStatus.textContent = ''; return; }
+    if (!byokStatus) { keyStatus.textContent = ''; return; }
+    keyStatus.innerHTML = byokStatus.hasKey
+      ? `API key saved ✓${PROVIDER_NAMES[byokStatus.provider] ? ` (${PROVIDER_NAMES[byokStatus.provider]})` : ''} · <button type="button" class="link-btn" id="byok-change">Change</button> · <button type="button" class="link-btn" id="byok-delete">Delete key</button>`
+      : `No key saved · <button type="button" class="link-btn" id="byok-change">Add key</button>`;
+    keyStatus.querySelector('#byok-change')?.addEventListener('click', () => openKeyForm(false));
+    keyStatus.querySelector('#byok-delete')?.addEventListener('click', deleteKey);
+  }
+  onByokStatus = showKeyStatus;
+  function setHelp(text, invalid = false) { keyHelp.textContent = text; keyHelp.classList.toggle('byok-invalid', invalid); }
+  function openKeyForm(thenExplain) {
+    explainAfterSave = thenExplain;
+    setHelp(KEY_HELP);
+    keyForm.hidden = false;
+    keyInput.focus();
+  }
+  function closeKeyForm() { keyInput.value = ''; keyForm.hidden = true; }
+  function finish(request, html) {
+    if (request !== explainRequest || !root.isConnected) return; // the panel moved on to another item
+    output.innerHTML = html;
+    explainBtn.disabled = false;
+    explainBtn.removeAttribute('aria-busy');
+  }
+  async function explain() {
+    if (!signedIn) { output.innerHTML = signInHtml; return; }
+    if (!byokStatus) await loadByokStatus();
+    if (!root.isConnected) return;
+    if (!byokStatus?.hasKey) { openKeyForm(true); return; }
+    const request = ++explainRequest;
+    explainBtn.disabled = true;
+    explainBtn.setAttribute('aria-busy', 'true');
+    output.innerHTML = '<p class="explain-loading"><span class="spinner" aria-hidden="true"></span> Asking your AI provider…</p>';
+    let result;
+    try { result = await byokFetch('explain', { method: 'POST', body: { prompt: buildExplainPrompt(item, prefs) } }); } catch { result = null; }
+    const { ok, status, data } = result || {};
+    if (ok && typeof data?.explanation === 'string') return finish(request, `<blockquote class="explain-quote">${escape(data.explanation)}</blockquote>`);
+    if (status === 401) return finish(request, signInHtml); // session expired
+    if (data?.error === 'no_key') {
+      byokStatus = { hasKey: false, provider: null };
+      showKeyStatus();
+      finish(request, '');
+      if (request === explainRequest && root.isConnected) openKeyForm(true);
+      return;
+    }
+    finish(request, `<p class="explain-error">${data?.error === 'key_rejected' ? 'Your AI provider rejected the saved key. Change it and try again.' : EXPLAIN_ERROR}</p>`);
+  }
+  async function deleteKey() {
+    let ok = false;
+    try { ({ ok } = await byokFetch('delete', { method: 'DELETE' })); } catch {}
+    if (!root.isConnected) return;
+    if (!ok) { output.innerHTML = '<p class="explain-error">Could not delete the key. Try again.</p>'; return; }
+    byokStatus = { hasKey: false, provider: null };
+    output.innerHTML = '<p class="explain-loading">API key deleted.</p>';
+    showKeyStatus();
+    explainBtn.focus();
+  }
+  explainBtn.addEventListener('click', explain);
+  root.querySelector('#byok-cancel').addEventListener('click', () => { closeKeyForm(); explainBtn.focus(); });
+  keyForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const key = keyInput.value.trim();
+    keyInput.value = ''; // the key is never kept client-side, not even in the field
+    if (!key.startsWith('sk-')) { setHelp('Enter an OpenAI (sk-…) or Anthropic (sk-ant-…) API key.', true); keyInput.focus(); return; }
+    saveBtn.disabled = true;
+    setHelp('Saving…');
+    let result;
+    try { result = await byokFetch('save', { method: 'POST', body: { key } }); } catch { result = null; }
+    saveBtn.disabled = false;
+    if (!root.isConnected) return;
+    if (!result?.ok || result.data?.saved !== true) {
+      setHelp(result?.status === 401 ? 'Your GitHub sign-in expired. Sign in again to save a key.' : typeof result?.data?.message === 'string' ? result.data.message : 'Could not save the key. Try again.', true);
+      keyInput.focus();
+      return;
+    }
+    byokStatus = { hasKey: true, provider: key.startsWith('sk-ant-') ? 'anthropic' : 'openai' };
+    closeKeyForm();
+    showKeyStatus();
+    explainBtn.focus();
+    if (explainAfterSave) explain();
+  });
+  showKeyStatus();
 }
 // Contribution starter pack for issues: a setup checklist inferred from the repo's root files and up to 3 recently
 // merged PRs. Both are read-only GitHub calls made only when the section is first expanded; failures degrade silently.
@@ -503,7 +603,7 @@ form.addEventListener('submit', async event => {
       status.textContent = `Search unavailable: ${err instanceof Error ? err.message : 'Unknown error'}. Try again later or use GitHub Search directly.`;
       resultRoot.innerHTML = fallback;
     }
-  } finally { btn.disabled = false; btn.innerHTML = 'Discover opportunities <span>→</span>'; resetReviewTrigger(); }
+  } finally { btn.disabled = false; btn.innerHTML = 'Discover opportunities <span>→</span>'; }
 });
 
 // Ripple on primary buttons. Keyboard activation (detail 0) has no pointer position, so it starts from the centre.
@@ -531,31 +631,6 @@ document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click'
   form.elements.level.value = chip.dataset.level;
   form.requestSubmit();
 }));
-
-// One-click review search: switch to Code reviews mode and search with whatever languages and filters the form already holds.
-// The clicked trigger shows a loading label until the submit handler's finally block resets it.
-let reviewTrigger = null;
-function resetReviewTrigger() {
-  if (!reviewTrigger) return;
-  reviewTrigger.innerHTML = reviewTrigger.dataset.label;
-  reviewTrigger.disabled = false;
-  reviewTrigger.removeAttribute('aria-busy');
-  reviewTrigger = null;
-}
-function findReviews(event) {
-  if (btn.disabled) return;
-  const trigger = event.currentTarget;
-  form.elements.mode.value = 'reviews';
-  trigger.dataset.label = trigger.innerHTML;
-  trigger.textContent = 'Finding PRs…';
-  trigger.disabled = true;
-  trigger.setAttribute('aria-busy', 'true');
-  reviewTrigger = trigger;
-  // Scroll before submitting; html's scroll-behavior makes this smooth unless the user prefers reduced motion.
-  document.querySelector('#discover').scrollIntoView({ block: 'start' });
-  form.requestSubmit();
-}
-document.querySelectorAll('#review-now-btn, #quick-review-btn').forEach(el => el.addEventListener('click', findReviews));
 
 // Optional GitHub sign-in. The Worker owns the session cookie; this only reads the public identity.
 // Any failure (Worker down, blocked, bad payload) leaves the auth UI hidden: sign-in is never required.
@@ -585,6 +660,7 @@ async function initAuth() {
     signedIn = true;
     proxyClient = createGitHubClient({ proxyBase: PROXY_BASE });
     proxyNote = `✓ Signed in as ${user.login} · Enhanced rate limits active`;
+    loadByokStatus();
     // Don't clobber a search that finished or started while the sign-in check was in flight.
     if (!lastResults && !btn.disabled) status.textContent = proxyNote;
   } catch {}

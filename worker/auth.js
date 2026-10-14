@@ -2,6 +2,8 @@
 // All secrets come from the Worker environment: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, WORKER_SECRET.
 // The GitHub access token lives only inside the HMAC-signed, HttpOnly session cookie. It is never stored
 // server-side, logged, or sent to the browser in a response body; /api/github uses it to proxy API calls.
+// BYOK AI provider keys are AES-GCM encrypted per user and stored only in the BYOK_KEYS KV namespace. A key goes
+// browser -> /api/byok/save once and is never returned to the browser afterwards.
 
 const SESSION_COOKIE = 'contributor_session';
 const STATE_COOKIE = 'contributor_oauth_state';
@@ -14,6 +16,12 @@ const GITHUB_USER_URL = 'https://api.github.com/user';
 const GITHUB_API_URL = 'https://api.github.com';
 // Upstream headers the browser may read; everything else (cookies, tokens) is dropped.
 const PROXY_RESPONSE_HEADERS = ['content-type', 'etag', 'link', 'x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-reset', 'x-ratelimit-resource'];
+const BYOK_TTL_SECONDS = 30 * 24 * 60 * 60;
+const BYOK_BODY_LIMIT = 4096;
+// The only method each BYOK endpoint accepts; the router answers OPTIONS preflight for all of them.
+const BYOK_ROUTES = { '/api/byok/save': 'POST', '/api/byok/explain': 'POST', '/api/byok/status': 'GET', '/api/byok/delete': 'DELETE' };
+const EXPLAIN_PROMPT_LIMIT = 500;
+const PROVIDER_TIMEOUT_MS = 20000;
 
 const encoder = new TextEncoder();
 
@@ -90,7 +98,7 @@ function corsHeaders(env) {
   return {
     'Access-Control-Allow-Origin': appOrigin(env),
     'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, If-None-Match',
     'Access-Control-Expose-Headers': PROXY_RESPONSE_HEADERS.join(', '),
   };
@@ -202,13 +210,141 @@ async function handleGitHubProxy(request, env, url) {
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }
 
+// AES-GCM with a key derived from WORKER_SECRET + user ID, so each user's stored key is encrypted separately.
+async function deriveByokKey(workerSecret, userId, usage) {
+  const material = await crypto.subtle.importKey('raw', encoder.encode(workerSecret + ':' + userId), 'PBKDF2', false, ['deriveKey']);
+  // 1000 iterations: sufficient for encrypting an already-secret API key (not a password hash).
+  // 100k iterations would exceed Cloudflare Workers free-tier 10ms CPU budget.
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: encoder.encode(userId), iterations: 1000, hash: 'SHA-256' }, material, { name: 'AES-GCM', length: 256 }, false, [usage]);
+}
+
+async function encryptKey(workerSecret, userId, apiKey) {
+  const key = await deriveByokKey(workerSecret, userId, 'encrypt');
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(apiKey));
+  return JSON.stringify({ iv: Array.from(iv), data: Array.from(new Uint8Array(encrypted)) });
+}
+
+async function decryptKey(workerSecret, userId, stored) {
+  const { iv, data } = JSON.parse(stored);
+  const key = await deriveByokKey(workerSecret, userId, 'decrypt');
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(iv) }, key, new Uint8Array(data));
+  return new TextDecoder().decode(decrypted);
+}
+
+// OpenAI (sk-...) or Anthropic (sk-ant-...) key; the charset also keeps the value safe to place in a request header.
+function validApiKey(key) {
+  return typeof key === 'string' && key.length >= 20 && key.length <= 200 && /^sk-[A-Za-z0-9_-]+$/.test(key);
+}
+
+function providerOf(key) {
+  return key.startsWith('sk-ant-') ? 'anthropic' : 'openai';
+}
+
+const byokStorageKey = session => `byok:${session.id}`;
+
+// Small JSON object bodies only; anything else (oversized, malformed, non-object) is null.
+async function readJsonBody(request) {
+  const text = await request.text();
+  if (text.length > BYOK_BODY_LIMIT) return null;
+  try {
+    const body = JSON.parse(text);
+    return body && typeof body === 'object' && !Array.isArray(body) ? body : null;
+  } catch {
+    return null;
+  }
+}
+
+async function handleByokSave(request, env, session) {
+  const body = await readJsonBody(request);
+  const apiKey = typeof body?.key === 'string' ? body.key.trim() : '';
+  if (!validApiKey(apiKey)) return json({ error: 'invalid_key', message: 'Enter an OpenAI (sk-…) or Anthropic (sk-ant-…) API key.' }, 400, env);
+  const encrypted = await encryptKey(env.WORKER_SECRET, String(session.id), apiKey);
+  // The provider rides in metadata so /status never has to decrypt the key.
+  await env.BYOK_KEYS.put(byokStorageKey(session), encrypted, { expirationTtl: BYOK_TTL_SECONDS, metadata: { provider: providerOf(apiKey) } });
+  return json({ saved: true }, 200, env);
+}
+
+// Worker -> provider call. Failures carry only a reason code: upstream bodies can echo a (masked) key and are dropped.
+async function requestExplanation(apiKey, prompt) {
+  const messages = [{ role: 'user', content: prompt }];
+  const anthropic = providerOf(apiKey) === 'anthropic';
+  const res = anthropic
+    ? await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 120, messages }),
+    })
+    : await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST', signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 120, messages }),
+    });
+  if (res.status === 401 || res.status === 403) throw Object.assign(new Error('rejected'), { code: 'key_rejected' });
+  if (!res.ok) throw Object.assign(new Error('failed'), { code: 'provider_failed' });
+  const data = await res.json();
+  const text = anthropic
+    ? (Array.isArray(data?.content) ? data.content : []).filter(x => x?.type === 'text').map(x => x.text).join('')
+    : data?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string' || !text.trim()) throw Object.assign(new Error('empty'), { code: 'provider_failed' });
+  return text.trim();
+}
+
+async function handleByokExplain(request, env, session) {
+  const body = await readJsonBody(request);
+  const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
+  if (!prompt || prompt.length > EXPLAIN_PROMPT_LIMIT) return json({ error: 'invalid_prompt', message: `Prompt must be 1-${EXPLAIN_PROMPT_LIMIT} characters.` }, 400, env);
+  const stored = await env.BYOK_KEYS.get(byokStorageKey(session));
+  if (stored === null) return json({ error: 'no_key', message: 'Save an API key first' }, 400, env);
+  const apiKey = await decryptKey(env.WORKER_SECRET, String(session.id), stored);
+  try {
+    return json({ explanation: await requestExplanation(apiKey, prompt) }, 200, env);
+  } catch (error) {
+    return json({ error: error.code || 'provider_failed' }, 502, env);
+  }
+}
+
+async function handleByokStatus(env, session) {
+  const { value, metadata } = await env.BYOK_KEYS.getWithMetadata(byokStorageKey(session));
+  const provider = value !== null && (metadata?.provider === 'openai' || metadata?.provider === 'anthropic') ? metadata.provider : null;
+  return json({ hasKey: value !== null, provider }, 200, env);
+}
+
+async function handleByokDelete(env, session) {
+  await env.BYOK_KEYS.delete(byokStorageKey(session));
+  return json({ deleted: true }, 200, env);
+}
+
+async function handleByok(request, env, url) {
+  const method = BYOK_ROUTES[url.pathname];
+  if (request.method !== method) return json({ error: 'method_not_allowed' }, 405, env);
+  if (!configured(env)) return json({ error: 'not_authenticated' }, 401, env);
+  // CSRF: browsers always send Origin on cross-origin POST/DELETE, so state-changing calls must come from the app.
+  if (method !== 'GET' && request.headers.get('Origin') !== appOrigin(env)) return json({ error: 'forbidden_origin' }, 403, env);
+  const session = await verify(env, readCookie(request, SESSION_COOKIE));
+  if (!session || !Number.isInteger(session.id)) return json({ error: 'not_authenticated' }, 401, env);
+  if (!env.BYOK_KEYS) return json({ error: 'byok_unavailable' }, 503, env);
+  try {
+    switch (url.pathname) {
+      case '/api/byok/save': return await handleByokSave(request, env, session);
+      case '/api/byok/explain': return await handleByokExplain(request, env, session);
+      case '/api/byok/status': return await handleByokStatus(env, session);
+      default: return await handleByokDelete(env, session);
+    }
+  } catch {
+    // Never expose error details (or anything derived from a key) to the browser.
+    return json({ error: 'byok_failed' }, 500, env);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     // Handle CORS preflight for the credentialed JSON endpoints
-    if (request.method === 'OPTIONS' && (url.pathname === '/auth/user' || url.pathname === '/api/github')) {
+    if (request.method === 'OPTIONS' && (url.pathname === '/auth/user' || url.pathname === '/api/github' || BYOK_ROUTES[url.pathname])) {
       return new Response(null, { status: 204, headers: corsHeaders(env) });
     }
+    if (BYOK_ROUTES[url.pathname]) return handleByok(request, env, url);
     if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET, OPTIONS' } });
     try {
       if (!configured(env)) return url.pathname === '/auth/user' ? json({ authenticated: false }, 401, env) : url.pathname === '/api/github' ? json({ error: 'not_authenticated' }, 401, env) : errorRedirect(env);
