@@ -18,4 +18,4 @@ APP_ORIGIN = "https://contributor-7cw.pages.dev"
 # Create with: wrangler kv namespace create BYOK_KEYS — replace id with the returned id
 [[kv_namespaces]]
 binding = "BYOK_KEYS"
-id = "PLACEHOLDER_KV_ID"
+id = "b484fa107eb04bff9a4424b526eeee48"
