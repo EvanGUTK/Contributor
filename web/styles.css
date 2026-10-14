@@ -167,6 +167,12 @@ section[id] { scroll-margin-top: 72px; }
 .result-bottom a, .result-bottom button { font-size: 12px; font-weight: 500; background: none; border: 0; cursor: pointer; padding: 4px 0; color: var(--text-muted); transition: color 0.15s ease; }
 .result-bottom a { color: var(--accent-hover); margin-right: auto; }
 .result-bottom a:hover, .result-bottom button:hover { color: var(--text-primary); text-decoration: underline; }
+/* Card CTAs: Copy AI prompt is the primary action; View on GitHub is the ghost secondary. */
+.result-bottom .btn { font-size: 13px; font-weight: 500; padding: 8px 16px; border: 1px solid transparent; border-radius: 8px; }
+.result-bottom .btn-primary { background: var(--accent); color: #fff; }
+.result-bottom .btn-primary:hover { background: var(--accent-hover); color: #fff; text-decoration: none; }
+.result-bottom .btn-ghost { background: transparent; border-color: var(--border); color: var(--text-secondary); margin-right: 0; }
+.result-bottom .btn-ghost:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-primary); text-decoration: none; }
 .save-toggle[aria-pressed="true"] { color: var(--text-primary); }
 .remove-saved { color: var(--danger) !important; }
 .card-warning { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--amber); }
