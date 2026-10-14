@@ -7,6 +7,11 @@ export const ACTIVITY_WINDOW_DAYS = 90;
 const DAY_MS = 86400000;
 /** Repository search tries at most this many interest words, one request each. */
 export const MAX_TOPIC_WORDS = 2;
+/**
+ * Review opportunities from repositories with fewer stars than this are flagged (a higher bar than the 10 used for repositories).
+ * GitHub's issue/PR search has no stars: qualifier (it is treated as free text), so this is enforced on repository metadata after the search.
+ */
+export const REVIEW_MIN_STARS = 25;
 
 const normalize = value => String(value ?? '').toLowerCase().trim();
 const words = value => normalize(value).split(/[,\s]+/).filter(Boolean).slice(0, 12);
@@ -81,6 +86,36 @@ export function scoreResponsiveness(signals = {}) {
   return { score: clamp(score, 0, 15), label, reasons, note: RESPONSIVENESS_NOTE };
 }
 
+/** Shown whenever a review opportunity looks unlikely to welcome outside reviewers. */
+export const OUTSIDE_REVIEW_DISCLAIMER = 'Outside reviews may not be welcome on this repository. Check CONTRIBUTING.md before commenting.';
+/** Text is flagged as non-English when more than this share of its letters are non-ASCII. */
+export const NON_ENGLISH_RATIO = 0.6;
+
+/** Rough, deterministic check: no language detection, only the share of non-ASCII letters. Empty text is never flagged. */
+export function isMostlyNonEnglish(text) {
+  const letters = String(text ?? '').match(/\p{L}/gu) ?? [];
+  if (!letters.length) return false;
+  const nonAscii = letters.filter(ch => ch.charCodeAt(0) > 127).length;
+  return nonAscii / letters.length > NON_ENGLISH_RATIO;
+}
+
+/**
+ * Flags, never filters: the result stays visible so the UI can warn. Only review opportunities are checked.
+ * Stars come from the repository record; an unknown count is not treated as low.
+ */
+export function assessReviewSafety(item, repo, text) {
+  const welcome = {
+    outsideReviewWelcome: true,
+    disclaimer: null,
+  };
+  if (!item.pull_request) return welcome;
+  const stars = repo?.stargazers_count;
+  const lowStars = Number.isFinite(stars) && stars < REVIEW_MIN_STARS;
+  // Archived repositories are read-only on GitHub: pull requests there cannot take new reviews.
+  if (!lowStars && !repo?.archived && !isMostlyNonEnglish(text)) return welcome;
+  return { outsideReviewWelcome: false, disclaimer: OUTSIDE_REVIEW_DISCLAIMER };
+}
+
 export function scoreOpportunity(item, preferences = {}, repo = null, { inProgress = false, signals = null } = {}) {
   const p = normalizePreferences(preferences);
   const { effectiveLevel, interestOnly, quickTask } = calibrateExperience(p);
@@ -147,7 +182,8 @@ export function scoreOpportunity(item, preferences = {}, repo = null, { inProgre
   const base = Math.min(100, Object.values(breakdown).reduce((a, b) => a + b, 0));
   const score = inProgress ? Math.max(0, base - IN_PROGRESS_PENALTY) : base;
   if (inProgress) reasons.push('A linked open pull request may already address this issue');
-  return { score, inProgress, maintainership, breakdown, reasons, difficulty, confidence: repo ? 'medium' : 'limited',
+  const safetyFlags = assessReviewSafety(item, repo, `${name} ${description}`);
+  return { score, inProgress, maintainership, breakdown, reasons, difficulty, safetyFlags, confidence: repo ? 'medium' : 'limited',
     calibration: { interestOnly, quickTask },
     note: 'Heuristic relevance score, not a prediction of acceptance or skill.' };
 }
@@ -193,6 +229,7 @@ export function buildSearchQuery(prefs, kind, { now = new Date(), topic } = {}) 
     // A comma between label values is GitHub's OR; the updated: qualifier drops stale issues.
     return `is:issue is:open label:"good first issue","help wanted" updated:>=${since}${language}`;
   }
+  // No stars: here; /search/issues does not support it and would treat it as text. See REVIEW_MIN_STARS.
   if (kind === 'reviews') return `is:pr is:open review:none${language}`;
   if (kind === 'repositories') {
     const chosen = topic === undefined ? extractTopics(p.interests, 1)[0] : extractTopics(topic, 1)[0];
