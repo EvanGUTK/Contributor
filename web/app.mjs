@@ -283,12 +283,43 @@ function renderResults({ items, p }) {
     el.textContent = saved ? 'Saved ✓' : 'Save'; el.setAttribute('aria-pressed', String(saved)); updateSavedBar();
   }));
 }
+// Staleness dots on saved issues and PRs. Checks at most STALE_CHECK_LIMIT items per render (anonymous limit is 60 req/hr); failures show no dot.
+const STALE_CHECK_LIMIT = 5;
+const STALE_DAYS = 30;
+const ISSUE_URL = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:issues|pull)\/(\d+)(?:[/?#]|$)/;
+let staleRender = 0;
+function staleness(data) {
+  if (data?.state === 'closed') return { kind: 'closed', label: 'This issue is closed' };
+  const updated = Date.parse(data?.updated_at || '');
+  if (data?.state === 'open' && Number.isFinite(updated) && Date.now() - updated > STALE_DAYS * 86400000) return { kind: 'stale', label: 'No activity in 30+ days' };
+  return null;
+}
+function checkStaleness(list) {
+  const render = ++staleRender;
+  const targets = list.map((item, i) => ({ i, m: ISSUE_URL.exec(item.html_url) })).filter(x => x.m).slice(0, STALE_CHECK_LIMIT);
+  targets.forEach(async ({ i, m: [, owner, repo, number] }) => {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${number}`, { headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(8000) });
+      if (!res.ok) return;
+      const state = staleness(await res.json());
+      const title = resultRoot.querySelector(`.result-card[data-index="${i}"] h3`);
+      if (!state || render !== staleRender || !viewingSaved || !title) return; // the saved list was re-rendered or left
+      const dot = document.createElement('span');
+      dot.className = `stale-dot stale-${state.kind}`;
+      dot.title = state.label;
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('aria-label', state.label);
+      title.appendChild(dot);
+    } catch {}
+  });
+}
 function renderSaved() {
   const list = readSaved();
   if (!list.length) { resultRoot.innerHTML = '<div class="empty">Nothing saved yet. Use Save on a result to keep it on this device.</div>'; return; }
   visibleItems = list; visiblePrefs = null;
   resultRoot.innerHTML = list.map((x, i) => card(x, null, i, true)).join('');
   staggerCards();
+  checkStaleness(list);
   resultRoot.querySelectorAll('.remove-saved').forEach(el => el.addEventListener('click', () => {
     const target = list[Number(el.dataset.index)];
     if (!writeSaved(readSaved().filter(x => x.html_url !== target.html_url))) status.textContent = 'Removing unavailable: this browser blocked local storage.';

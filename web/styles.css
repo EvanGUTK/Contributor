@@ -190,6 +190,9 @@ section[id] { scroll-margin-top: 72px; }
 .copy-prompt[data-tooltip]:hover::after, .copy-prompt[data-tooltip]:focus-visible::after { opacity: 1; visibility: visible; }
 .save-toggle[aria-pressed="true"] { color: var(--text-primary); }
 .remove-saved { color: var(--danger) !important; }
+.stale-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 6px; vertical-align: middle; }
+.stale-closed { background: #ef4444; }
+.stale-stale { background: #f59e0b; }
 .card-warning { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--amber); }
 .byok-note { margin: 10px 0 0; font-size: 11px; line-height: 1.5; color: var(--text-subtle); }
 .empty { grid-column: 1 / -1; text-align: center; border: 1px dashed var(--border); border-radius: var(--radius); padding: 56px 24px; color: var(--text-muted); }
