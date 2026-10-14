@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#08090a" />
+  <meta name="description" content="Connect the Contributor MCP server to Claude Code, Codex CLI or Hermes for direct GitHub opportunity discovery." />
+  <title>Setup — Connect Contributor to your AI assistant</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .setup-hero { padding: 96px 0 72px; }
+    .setup-hero .hero-sub { max-width: 600px; }
+    .setup-note { max-width: 640px; margin: 20px auto 0; color: var(--text-muted); font-size: 12px; text-align: center; }
+    .assistant { padding: 48px 0; border-top: 1px solid var(--border-subtle); }
+    .assistant h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.4px; margin: 10px 0 24px; }
+    .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 20px; max-width: 760px; }
+    .step-title { color: var(--text-primary); font-size: 14px; font-weight: 500; margin: 0 0 8px; }
+    .step-title span { color: var(--text-muted); font-weight: 400; }
+    .codeblock { position: relative; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .codeblock pre { margin: 0; padding: 14px 84px 14px 16px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.6; color: var(--text-primary); }
+    .codeblock code { font-family: inherit; }
+    .copy-btn { position: absolute; top: 8px; right: 8px; background: rgba(255, 255, 255, 0.04); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 500; cursor: pointer; transition: background 0.15s ease, color 0.15s ease; }
+    .copy-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); }
+    .copy-btn[data-state="copied"] { color: var(--green); }
+    .copy-btn[data-state="error"] { color: var(--danger); }
+    .tools-table { width: 100%; max-width: 760px; border-collapse: collapse; font-size: 13px; }
+    .tools-table th, .tools-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+    .tools-table th { color: var(--text-muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .tools-table td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text-primary); white-space: nowrap; }
+    .setup-prose { max-width: 760px; color: var(--text-secondary); margin: 0 0 16px; }
+    .setup-prose code, .step-title code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 1px 5px; color: var(--text-primary); }
+    @media (max-width: 620px) {
+      .setup-hero { padding: 56px 0 40px; }
+      .tools-table td:first-child { white-space: normal; word-break: break-word; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a href="./index.html" class="brand" aria-label="Contributor home"><span class="brandmark" aria-hidden="true">C</span> contributor<span class="branddot">.</span></a>
+      <nav aria-label="Main navigation" class="nav"><a href="./index.html#discover">Discover</a><a href="./index.html#how">How it works</a><a href="./setup.html" aria-current="page">Setup</a><a href="https://github.com/EvanGUTK/contributor" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav>
+      <div class="top-right">
+        <span class="top-status">Community-first · Open source</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero setup-hero" aria-labelledby="setup-title">
+        <h1 id="setup-title">Connect Contributor to your AI assistant.</h1>
+        <p class="hero-sub">The Contributor MCP server gives Claude, Codex, and Hermes direct access to GitHub opportunity discovery — no copy-paste needed.</p>
+        <p class="setup-note">These commands are setup starting points. Live handshakes with each client have not been verified yet — confirm tool discovery in a real session, and follow your client's own <code>mcp add --help</code> if the syntax differs.</p>
+      </section>
+
+      <section class="assistant" id="claude-code" aria-labelledby="claude-title">
+        <p class="eyebrow">01 / CLAUDE CODE</p>
+        <h2 id="claude-title">Claude Code</h2>
+        <ol class="steps">
+          <li>
+            <p class="step-title">Step 1 <span>— Install dependencies (one-time)</span></p>
+            <div class="codeblock"><pre><code>cd /path/to/contributor &amp;&amp; npm install</code></pre><button type="button" class="copy-btn" aria-label="Copy command">Copy</button></div>
+          </li>
+          <li>
+            <p class="step-title">Step 2 <span>— Add to Claude Code</span></p>
+            <div class="codeblock"><pre><code>claude mcp add --transport stdio contributor -- node /absolute/path/to/contributor/apps/mcp/server.mjs</code></pre><button type="button" class="copy-btn" aria-label="Copy command">Copy</button></div>
+          </li>
+          <li>
+            <p class="step-title">Step 3 <span>— Ask Claude</span></p>
+            <div class="codeblock"><pre><code>Find me five Python open-source issues I could work on this weekend</code></pre><button type="button" class="copy-btn" aria-label="Copy prompt">Copy</button></div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="assistant" id="codex" aria-labelledby="codex-title">
+        <p class="eyebrow">02 / CODEX CLI</p>
+        <h2 id="codex-title">Codex CLI</h2>
+        <ol class="steps">
+          <li>
+            <p class="step-title">Step 1 <span>— Install dependencies (one-time)</span></p>
+            <div class="codeblock"><pre><code>cd /path/to/contributor &amp;&amp; npm install</code></pre><button type="button" class="copy-btn" aria-label="Copy command">Copy</button></div>
+          </li>
+          <li>
+            <p class="step-title">Step 2 <span>— Add to Codex via the CLI (use its built-in MCP management; don't overwrite an existing <code>~/.codex/config.toml</code>)</span></p>
+            <div class="codeblock"><pre><code>codex mcp add contributor -- node /absolute/path/to/contributor/apps/mcp/server.mjs</code></pre><button type="button" class="copy-btn" aria-label="Copy command">Copy</button></div>
+          </li>
+          <li>
+            <p class="step-title">Step 3 <span>— Ask Codex</span></p>
+            <div class="codeblock"><pre><code>Use Contributor to find JavaScript repos with beginner-friendly issues</code></pre><button type="button" class="copy-btn" aria-label="Copy prompt">Copy</button></div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="assistant" id="hermes" aria-labelledby="hermes-title">
+        <p class="eyebrow">03 / HERMES</p>
+        <h2 id="hermes-title">Hermes</h2>
+        <ol class="steps">
+          <li>
+            <p class="step-title">Step 1 <span>— Install dependencies (one-time)</span></p>
+            <div class="codeblock"><pre><code>cd /path/to/contributor &amp;&amp; npm install</code></pre><button type="button" class="copy-btn" aria-label="Copy command">Copy</button></div>
+          </li>
+          <li>
+            <p class="step-title">Step 2 <span>— Add the MCP server in Hermes settings</span></p>
+            <div class="codeblock"><pre><code>hermes mcp add contributor -- node /absolute/path/to/contributor/apps/mcp/server.mjs</code></pre><button type="button" class="copy-btn" aria-label="Copy command">Copy</button></div>
+          </li>
+          <li>
+            <p class="step-title">Step 3 <span>— Ask Hermes</span></p>
+            <div class="codeblock"><pre><code>Search Contributor for open-source AI projects I could contribute to</code></pre><button type="button" class="copy-btn" aria-label="Copy prompt">Copy</button></div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="assistant" id="tools" aria-labelledby="tools-title">
+        <p class="eyebrow">04 / AVAILABLE TOOLS</p>
+        <h2 id="tools-title">Available tools</h2>
+        <table class="tools-table">
+          <thead><tr><th scope="col">Tool</th><th scope="col">What it does</th></tr></thead>
+          <tbody>
+            <tr><td>discover_opportunities</td><td>Primary entry point: find public repositories, issues and PRs for you.</td></tr>
+            <tr><td>find_review_requests</td><td>Find open public pull requests without submitted reviews.</td></tr>
+            <tr><td>inspect_repository</td><td>Read public repository metadata: language, activity, issues and license.</td></tr>
+            <tr><td>get_repository_passport</td><td>Summarize whether a repository looks ready for outside contributors.</td></tr>
+            <tr><td>analyze_issue</td><td>Fetch issue context and produce a safe starter plan prompt.</td></tr>
+            <tr><td>analyze_pull_request</td><td>Fetch PR metadata and changed-file summaries for human-led review.</td></tr>
+            <tr><td>prepare_review_checklist</td><td>Generate a structured review checklist for a PR you selected; posts nothing.</td></tr>
+            <tr><td>prepare_contribution</td><td>Generate an approval-first handoff prompt for an opportunity you chose.</td></tr>
+            <tr><td>get_contribution_status</td><td>Read the current public state of an issue or pull request.</td></tr>
+            <tr><td>request_memory_handoff</td><td>Let your assistant declare which preferences you approved sharing.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="assistant" id="token" aria-labelledby="token-title">
+        <p class="eyebrow">05 / OPTIONAL</p>
+        <h2 id="token-title">GitHub token for higher rate limits</h2>
+        <p class="setup-prose">No token is needed for anonymous use. If you hit GitHub's public API rate limit, set <code>CONTRIBUTOR_GITHUB_TOKEN</code> in the environment of the MCP server process. Use a minimal, read-only token and never commit it to a config file.</p>
+        <div class="steps">
+          <div class="codeblock"><pre><code>export CONTRIBUTOR_GITHUB_TOKEN=&lt;your-read-only-token&gt;</code></pre><button type="button" class="copy-btn" aria-label="Copy command">Copy</button></div>
+          <p class="setup-prose">Then start your assistant from that shell so the server inherits the variable.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer><span class="footer-name">contributor<span>.</span></span><p>Open source · BYOK-first · User-approved publishing</p><span>Built for the next generation of contributors.</span></footer>
+  </div>
+  <script>
+    document.querySelectorAll('.copy-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var text = btn.parentElement.querySelector('code').textContent;
+        var done = function (state, label) {
+          btn.dataset.state = state; btn.textContent = label;
+          setTimeout(function () { delete btn.dataset.state; btn.textContent = 'Copy'; }, 1800);
+        };
+        if (!navigator.clipboard) return done('error', 'Failed');
+        navigator.clipboard.writeText(text).then(function () { done('copied', 'Copied'); }, function () { done('error', 'Failed'); });
+      });
+    });
+  </script>
+</body>
+</html>
