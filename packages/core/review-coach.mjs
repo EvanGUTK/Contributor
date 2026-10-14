@@ -31,7 +31,7 @@ const item = (category, severity, question, evidence) => ({ category, question, 
 const list = (values, max = MAX_LISTED) => values.length > max ? `${values.slice(0, max).join(', ')} (+${values.length - max} more)` : values.join(', ');
 const isTest = name => TEST_PATH.test(name);
 const patchOf = file => file.patch ?? file.patch_excerpt ?? '';
-const descriptionOf = pr => String(pr.description_excerpt ?? pr.body ?? '');
+const descriptionOf = pr => String(pr.description_excerpt ?? pr.body ?? '').slice(0, 4000);
 const redact = text => text.length <= 8 ? '****' : `${text.slice(0, 4)}…[redacted]`;
 
 /** Added lines only (diff '+' lines minus the '+++' header), so removed secrets and context are never flagged. */
