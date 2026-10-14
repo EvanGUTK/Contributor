@@ -164,6 +164,7 @@ function detailHtml(item) {
     <div class="panel-section panel-explain" id="panel-explain"></div>
     ${warning}${notes.map(n => `<p class="panel-note">${escape(n)}</p>`).join('')}
     <div class="panel-section panel-similar" id="panel-similar" hidden></div>
+    ${kind === 'Issue' && validOwner && /^[\w.-]+$/.test(name) ? `<div class="panel-section panel-starter" id="panel-starter"><h4><button type="button" class="starter-toggle" id="starter-toggle" aria-expanded="false" aria-controls="starter-body"><span class="starter-chevron" aria-hidden="true">▶</span> Starter Pack</button></h4><div class="starter-body" id="starter-body"></div></div>` : ''}
     <div class="panel-actions"><a class="btn btn-primary" href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a><button type="button" class="btn btn-text" id="panel-copy">Copy AI prompt</button></div>`;
 }
 // Count a number up from 0 with an ease-out curve. The final value is already in the markup, so skipping is safe.
@@ -317,12 +318,73 @@ function initExplain(item, p) {
   });
   showKeyStatus();
 }
+// Contribution starter pack for issues: a setup checklist inferred from the repo's root files and up to 3 recently
+// merged PRs. Both are read-only GitHub calls made only when the section is first expanded; failures degrade silently.
+const MERGED_PR_LIMIT = 3;
+let starterRequest = 0;
+// Signed-in users read through the proxy (higher rate limit); any proxy failure retries once with direct anonymous calls.
+async function githubRead(read) {
+  if (proxyClient) { try { return await read(proxyClient); } catch {} }
+  return read(directClient);
+}
+function setupChecklist(files, repoUrl, issueUrl) {
+  const names = new Set((files || []).map(f => String(f?.name || '').toLowerCase()));
+  const steps = [`Clone the repo: <code>git clone ${escape(repoUrl)}</code>`];
+  if (names.has('package.json')) steps.push('Install deps: <code>npm install</code>');
+  if (names.has('requirements.txt')) steps.push('Install deps: <code>pip install -r requirements.txt</code>');
+  else if (names.has('pyproject.toml')) steps.push('Install deps: <code>pip install -e .</code>');
+  if (names.has('cargo.toml')) steps.push('Build: <code>cargo build</code>');
+  if (names.has('makefile')) steps.push('Run: <code>make</code>');
+  if (names.has('contributing.md')) steps.push(`Read <a href="${escape(repoUrl)}/blob/HEAD/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">CONTRIBUTING.md ↗</a>`);
+  steps.push(`Find the issue: <a href="${escape(issueUrl)}" target="_blank" rel="noopener noreferrer">${escape(issueUrl.replace('https://github.com/', ''))} ↗</a>`);
+  return `<ul class="starter-checklist">${steps.map(s => `<li><label><input type="checkbox" /><span>${s}</span></label></li>`).join('')}</ul>`;
+}
+function mergedPrList(pulls) {
+  const merged = (Array.isArray(pulls) ? pulls : [])
+    .filter(pr => pr?.merged_at && typeof pr.html_url === 'string' && /^https:\/\/github\.com\//.test(pr.html_url))
+    .slice(0, MERGED_PR_LIMIT);
+  if (!merged.length) return '<p class="starter-empty">No recently merged PRs found.</p>';
+  return `<ul class="starter-prs">${merged.map(pr => `<li><a href="${escape(pr.html_url)}" target="_blank" rel="noopener noreferrer">${escape(pr.title || 'Untitled')}</a> <span class="starter-when">· merged ${escape(relativeTime(pr.merged_at))}</span></li>`).join('')}</ul>`;
+}
+async function loadStarterPack(body, owner, name, issueUrl) {
+  const request = ++starterRequest;
+  const repoUrl = `https://github.com/${owner}/${name}`;
+  body.innerHTML = `<div class="starter-inner"><h5>Setup checklist</h5><div id="starter-setup"><p class="starter-empty">Loading…</p></div><div id="starter-prs-section"><h5>Example merged PRs</h5><div id="starter-prs"><p class="starter-empty">Loading…</p></div></div></div>`;
+  const stale = () => request !== starterRequest || !body.isConnected; // the panel moved on to another item
+  const [files, pulls] = await Promise.allSettled([
+    githubRead(client => client.getRepoFiles(owner, name)),
+    githubRead(client => client.request(`/repos/${owner}/${name}/pulls?state=closed&sort=updated&per_page=5`)),
+  ]);
+  if (stale()) return;
+  // Without a file listing the checklist still offers the steps that need no repo knowledge.
+  body.querySelector('#starter-setup').innerHTML = setupChecklist(files.status === 'fulfilled' ? files.value : null, repoUrl, issueUrl);
+  if (pulls.status === 'fulfilled') body.querySelector('#starter-prs').innerHTML = mergedPrList(pulls.value);
+  else body.querySelector('#starter-prs-section').remove();
+}
+function initStarterPack(item) {
+  const toggle = panelBody.querySelector('#starter-toggle');
+  const body = panelBody.querySelector('#starter-body');
+  if (!toggle || !body) return;
+  const [owner, name] = String(item._repoName || '').split('/');
+  let loaded = false;
+  toggle.addEventListener('click', () => {
+    const open = toggle.getAttribute('aria-expanded') !== 'true';
+    toggle.setAttribute('aria-expanded', String(open));
+    body.classList.toggle('open', open);
+    if (open && !loaded) {
+      loaded = true;
+      const issueUrl = /^https:\/\/github\.com\//.test(item.html_url) ? item.html_url : `https://github.com/${owner}/${name}/issues`;
+      loadStarterPack(body, owner, name, issueUrl);
+    }
+  });
+}
 function openPanel(item, p) {
   panelReturnFocus = document.activeElement;
   panelBody.innerHTML = detailHtml(item);
   animateCount(panelBody.querySelector('.panel-score'), Number(item._match.score));
   loadSimilar(item, p);
   initExplain(item, p);
+  initStarterPack(item);
   panel.setAttribute('aria-labelledby', 'panel-title');
   panel.removeAttribute('aria-label');
   panelBackdrop.hidden = false;
