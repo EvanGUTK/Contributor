@@ -351,15 +351,33 @@ async function loadStarterPack(body, owner, name, issueUrl) {
   const repoUrl = `https://github.com/${owner}/${name}`;
   body.innerHTML = `<div class="starter-inner"><h5>Setup checklist</h5><div id="starter-setup"><p class="starter-empty">Loading…</p></div><div id="starter-prs-section"><h5>Example merged PRs</h5><div id="starter-prs"><p class="starter-empty">Loading…</p></div></div></div>`;
   const stale = () => request !== starterRequest || !body.isConnected; // the panel moved on to another item
-  const [files, pulls] = await Promise.allSettled([
-    githubRead(client => client.getRepoFiles(owner, name)),
-    githubRead(client => client.request(`/repos/${owner}/${name}/pulls?state=closed&sort=updated&per_page=5`)),
-  ]);
-  if (stale()) return;
-  // Without a file listing the checklist still offers the steps that need no repo knowledge.
-  body.querySelector('#starter-setup').innerHTML = setupChecklist(files.status === 'fulfilled' ? files.value : null, repoUrl, issueUrl);
-  if (pulls.status === 'fulfilled') body.querySelector('#starter-prs').innerHTML = mergedPrList(pulls.value);
-  else body.querySelector('#starter-prs-section').remove();
+  // Each half renders as soon as its own request settles. Without a file listing the checklist still offers the steps that need no repo knowledge.
+  githubRead(client => client.getRepoFiles(owner, name)).catch(() => null).then(files => {
+    if (!stale()) body.querySelector('#starter-setup').innerHTML = setupChecklist(files, repoUrl, issueUrl);
+  });
+  // sort=updated defaults to ascending, so ask for newest first explicitly.
+  githubRead(client => client.request(`/repos/${owner}/${name}/pulls?state=closed&sort=updated&direction=desc&per_page=10`)).then(
+    pulls => { if (!stale()) body.querySelector('#starter-prs').innerHTML = mergedPrList(pulls); },
+    () => { if (!stale()) body.querySelector('#starter-prs-section')?.remove(); },
+  );
+}
+// max-height animates between 0 and the measured content height, then lifts the cap so content loaded later is never clipped.
+function setStarterOpen(body, open) {
+  body.style.maxHeight = `${body.scrollHeight}px`;
+  if (open) {
+    body.classList.add('open');
+    // No motion, or nothing to animate (transitionend would never fire): show at full height straight away.
+    if (!okToAnimate() || !body.scrollHeight) { body.style.maxHeight = 'none'; return; }
+    body.addEventListener('transitionend', function done(event) {
+      if (event.target !== body || event.propertyName !== 'max-height') return;
+      body.removeEventListener('transitionend', done);
+      if (body.classList.contains('open')) body.style.maxHeight = 'none';
+    });
+  } else {
+    void body.offsetHeight; // commit the measured height so the collapse animates from it
+    body.classList.remove('open');
+    body.style.maxHeight = '0px';
+  }
 }
 function initStarterPack(item) {
   const toggle = panelBody.querySelector('#starter-toggle');
@@ -370,12 +388,13 @@ function initStarterPack(item) {
   toggle.addEventListener('click', () => {
     const open = toggle.getAttribute('aria-expanded') !== 'true';
     toggle.setAttribute('aria-expanded', String(open));
-    body.classList.toggle('open', open);
+    // Load first so the Loading… placeholders give setStarterOpen() a height to animate to.
     if (open && !loaded) {
       loaded = true;
       const issueUrl = /^https:\/\/github\.com\//.test(item.html_url) ? item.html_url : `https://github.com/${owner}/${name}/issues`;
       loadStarterPack(body, owner, name, issueUrl);
     }
+    setStarterOpen(body, open);
   });
 }
 function openPanel(item, p) {

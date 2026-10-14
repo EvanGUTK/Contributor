@@ -274,7 +274,7 @@ section[id] { scroll-margin-top: 72px; }
 .starter-chevron { display: inline-block; font-size: 9px; transition: transform 0.2s ease; }
 .starter-toggle[aria-expanded="true"] .starter-chevron { transform: rotate(90deg); }
 .starter-body { max-height: 0; overflow: hidden; visibility: hidden; transition: max-height 0.3s ease, visibility 0s linear 0.3s; }
-.starter-body.open { max-height: 800px; visibility: visible; transition: max-height 0.3s ease, visibility 0s; }
+.starter-body.open { visibility: visible; transition: max-height 0.3s ease, visibility 0s; } /* height set by setStarterOpen() */
 .starter-inner { padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .starter-inner h5 { margin: 6px 0 2px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
 .starter-checklist, .starter-prs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
