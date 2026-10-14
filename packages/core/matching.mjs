@@ -2,6 +2,9 @@
 export const LANGUAGES = ['Python', 'TypeScript', 'JavaScript', 'Rust', 'Go', 'C++', 'Java', 'C#', 'Julia', 'MATLAB', 'Swift', 'Kotlin'];
 export const MODES = ['all', 'issues', 'reviews', 'repositories'];
 export const LEVELS = ['beginner', 'intermediate', 'advanced'];
+/** Issues with no activity inside this window are excluded from discovery as likely stale. */
+export const ACTIVITY_WINDOW_DAYS = 90;
+const DAY_MS = 86400000;
 
 const normalize = value => String(value ?? '').toLowerCase().trim();
 const words = value => normalize(value).split(/[,\s]+/).filter(Boolean).slice(0, 12);
@@ -110,11 +113,15 @@ export function buildHandoffPrompt(item, preferences = {}) {
 }
 
 /** Construct a GitHub search string from selected controls, never from raw query operators. */
-export function buildSearchQuery(prefs, kind) {
+export function buildSearchQuery(prefs, kind, { now = new Date() } = {}) {
   const p = normalizePreferences(prefs);
   const language = p.languages[0] && LANGUAGES.some(x => x.toLowerCase() === p.languages[0].toLowerCase()) ? ` language:${p.languages[0].replace(/\+/g, '+')}` : '';
   // Do not append arbitrary user interests to issue search: it can crowd out otherwise relevant matches.
-  if (kind === 'issues') return `is:issue is:open label:"good first issue"${language}`;
+  if (kind === 'issues') {
+    const since = new Date(now.getTime() - ACTIVITY_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10);
+    // A comma between label values is GitHub's OR; the updated: qualifier drops stale issues.
+    return `is:issue is:open label:"good first issue","help wanted" updated:>=${since}${language}`;
+  }
   if (kind === 'reviews') return `is:pr is:open review:none${language}`;
   if (kind === 'repositories') {
     const topic = words(p.interests).find(x => /^[a-z0-9-]{3,25}$/.test(x));
