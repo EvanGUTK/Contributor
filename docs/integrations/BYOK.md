@@ -6,6 +6,25 @@ BYOK = bring your own key / bring your own AI entitlement. Contributor's primary
 
 Claude/Codex/OpenCode/Hermes hosts Contributor MCP and makes its own model calls. The local MCP server uses only GitHub public endpoints, not model inference. AI model billing, availability and context window are outside Contributor's control.
 
+### Which actions use AI
+
+| Contributor action | AI call? | Notes |
+|:--|:--|:--|
+| Discovery, ranking, match reasons | None | Public GitHub data and deterministic local scoring |
+| Copy AI prompt | None | Builds text locally and copies it to the clipboard |
+| Contributor MCP tools | None | Read-only GitHub lookups on the user's machine |
+| What the assistant does with the prompt or tool output | Yes, by the user's assistant | Billed by the user's provider, never by Contributor |
+
+### How billing works
+
+Contributor never proxies, resells or charges for AI. Your assistant talks to your provider with your credentials, and the provider bills you directly. Contributor has no access to your key, plan or usage.
+
+### Soft cap and prompt-size estimate
+
+The web app shows an estimated token count next to **Copy AI prompt** (`characters ÷ 4`, computed locally with no network request) so you can judge whether the prompt fits a budget you set yourself. This is an estimate for the generated prompt only; it excludes your assistant's system prompt, tool results, conversation history and the model's output.
+
+**Contributor cannot enforce a billing cap on any external provider.** Configure hard limits and alerts in your provider's own console or assistant settings. The soft cap is a mental budget, not an enforced limit.
+
 ## Mode 2 — Web AI Coach (planned)
 
 Don't send private model keys to a shared server or browser localStorage without a reviewed secret handling model. Possible methods: local companion process with OS credential store, user-hosted adapter, provider OAuth where supported, or short-lived scoped BYOK sessions after explicit opt-in. Each option requires a security and licensing review.
