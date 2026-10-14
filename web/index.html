@@ -3,10 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#08090a" />
   <meta name="description" content="Contributor finds meaningful open-source repositories, beginner-friendly issues and pull requests worth reviewing — free, open source and AI-provider independent." />
   <title>Contributor — Find your place in open source.</title>
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -24,20 +27,11 @@
     </header>
 
     <main>
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">The open source opportunity engine</p>
-          <h1>Good code deserves<br /><em>good contributors.</em></h1>
-          <p class="hero-sub">Stop digging through thousands of GitHub issues. Tell us what you know and what excites you. We'll find meaningful repositories, issues, and pull requests worth your time.</p>
-          <div class="hero-actions"><a class="btn btn-primary" href="#discover">Find my next contribution <span>↗</span></a><a class="btn btn-text" href="#how">See how it works <span>↓</span></a></div>
-          <div class="hero-meta"><span><strong>$0</strong> platform subscription</span><i></i><span><strong>BYOK</strong> AI optional</span><i></i><span><strong>GitHub</strong> public data</span></div>
-        </div>
-        <div class="hero-visual" role="img" aria-label="Illustration: repositories, issues and reviews matched to a contributor">
-          <div class="hero-blob blob-one"></div><div class="hero-blob blob-two"></div>
-          <div class="mini-card mini-one"><span class="mini-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v15H6a2 2 0 0 0-2 2z"/><path d="M4 20a2 2 0 0 1 2-2h12v3H6a2 2 0 0 1-2-1z"/></svg></span><div><b>Meaningful repositories</b><small>Beyond good first issues</small></div></div>
-          <div class="mini-card mini-two"><span class="mini-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5"/><path d="M12 16h.01"/></svg></span><div><b>Issues that fit you</b><small>Ranked with clear reasons</small></div></div>
-          <div class="mini-card mini-three"><span class="mini-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7"/><path d="M18 11.5c0 4-6 3-12 4.5"/></svg></span><div><b>Your AI, your choice</b><small>Claude · Codex · Hermes</small></div></div>
-        </div>
+      <section class="hero" aria-labelledby="hero-title">
+        <h1 id="hero-title">Find your next <span class="nowrap">open-source</span> contribution.</h1>
+        <p class="hero-sub">Search real GitHub repositories, issues and pull requests. Ranked by relevance. No account required.</p>
+        <div class="hero-actions"><a class="btn btn-primary" href="#discover">Start discovering <span aria-hidden="true">→</span></a><a class="btn btn-text" href="https://github.com/EvanGUTK/contributor" target="_blank" rel="noopener noreferrer">View on GitHub <span aria-hidden="true">↗</span></a></div>
+        <ul class="hero-pills" aria-label="Highlights"><li>⭐ Ranked results</li><li>🔒 Read-only</li><li>✦ Free forever</li></ul>
       </section>
 
       <section class="finder" id="discover" aria-labelledby="finder-title">
@@ -60,6 +54,11 @@
     </main>
     <footer><span class="footer-name">contributor<span>.</span></span><p>Open source · BYOK-first · User-approved publishing</p><span>Built for the next generation of contributors.</span></footer>
   </div>
+  <div class="panel-backdrop" id="panel-backdrop" hidden></div>
+  <aside class="detail-panel" id="detail-panel" role="dialog" aria-modal="true" aria-label="Opportunity details" aria-hidden="true" tabindex="-1">
+    <button type="button" class="panel-close" id="panel-close" aria-label="Close details">×</button>
+    <div class="panel-body" id="panel-body"></div>
+  </aside>
   <script type="module" src="./app.mjs"></script>
 </body>
 </html>
