@@ -1,0 +1,15 @@
+# Cloudflare Worker for GitHub App read-only login.
+# Secrets are NOT stored here. They are set out-of-band with `wrangler secret put`:
+#   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, WORKER_SECRET
+name = "contributor-auth"
+# Wrangler resolves `main` relative to this config file (worker/), i.e. worker/auth.js.
+main = "auth.js"
+compatibility_date = "2026-10-14"
+
+routes = [
+  { pattern = "contributor-7cw.pages.dev/auth/*", zone_name = "pages.dev" }
+]
+
+# Public, non-secret setting: where the Worker redirects users after login/logout.
+[vars]
+APP_ORIGIN = "https://contributor-7cw.pages.dev"
