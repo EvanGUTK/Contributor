@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGitHubClient, GitHubApiError } from '../packages/github/client.mjs';
+import { scoreResponsiveness } from '../packages/core/matching.mjs';
 
 const reply = (body, { status = 200, etag = null } = {}) => ({
   ok: status >= 200 && status < 300,
@@ -227,4 +228,54 @@ test('review and repository results trigger no linked PR lookups', async () => {
   const client = createGitHubClient({ fetchImpl: async url => { queries.push(queryOf(url)); return reply({ items: [{ ...issue(5), pull_request: {} }] }); } });
   await client.discover({ mode: 'reviews' });
   assert.equal(queries.length, 1);
+});
+
+const DAY = 86400000;
+const daysAgo = n => new Date(Date.now() - n * DAY).toISOString();
+const responsivenessFetch = ({ repoBody, closed, calls = [] }) => async url => {
+  calls.push(url);
+  return reply(new URL(url).pathname.endsWith('/issues') ? closed : repoBody);
+};
+
+test('getResponsivenessSignals combines repo metadata with recent closed issues', async () => {
+  const calls = [];
+  const closed = [
+    { closed_at: daysAgo(2) }, { closed_at: daysAgo(10) }, { closed_at: daysAgo(29) },
+    { closed_at: daysAgo(60) },                       // outside the 30 day window
+    { closed_at: daysAgo(1), pull_request: {} },      // pull requests are not issue closes
+  ];
+  const repoBody = { pushed_at: daysAgo(4), open_issues_count: 42, archived: false };
+  const client = createGitHubClient({ fetchImpl: responsivenessFetch({ repoBody, closed, calls }) });
+  const signals = await client.getResponsivenessSignals('a', 'b');
+  assert.deepEqual(signals, { recentCloseCount: 3, daysSinceLastPush: 4, openIssueCount: 42, archived: false });
+  assert.equal(calls.length, 2);
+  assert.ok(calls.some(u => u.endsWith('/repos/a/b/issues?state=closed&sort=updated&per_page=5')));
+});
+
+test('getResponsivenessSignals is read-only, cached and reports archived repos', async () => {
+  const calls = [];
+  const client = createGitHubClient({ fetchImpl: async (url, init) => {
+    assert.equal(init.method, undefined);
+    return responsivenessFetch({ repoBody: { pushed_at: daysAgo(400), open_issues_count: 900, archived: true }, closed: [], calls })(url);
+  } });
+  const first = await client.getResponsivenessSignals('a', 'b');
+  await client.getResponsivenessSignals('a', 'b');
+  assert.equal(calls.length, 2);
+  assert.deepEqual(first, { recentCloseCount: 0, daysSinceLastPush: 400, openIssueCount: 900, archived: true });
+});
+
+test('getResponsivenessSignals reports unknown values as null and rejects bad identifiers', async () => {
+  const client = createGitHubClient({ fetchImpl: responsivenessFetch({ repoBody: {}, closed: [] }) });
+  const signals = await client.getResponsivenessSignals('a', 'b');
+  assert.equal(signals.daysSinceLastPush, null);
+  assert.equal(signals.openIssueCount, null);
+  await assert.rejects(() => client.getResponsivenessSignals('a/../b', 'c'), /Invalid GitHub repository identifier/);
+});
+
+test('getResponsivenessSignals output feeds scoreResponsiveness', async () => {
+  const closed = [{ closed_at: daysAgo(1) }, { closed_at: daysAgo(2) }, { closed_at: daysAgo(3) }];
+  const client = createGitHubClient({ fetchImpl: responsivenessFetch({ repoBody: { pushed_at: daysAgo(2), open_issues_count: 600, archived: false }, closed }) });
+  const result = scoreResponsiveness(await client.getResponsivenessSignals('a', 'b'));
+  assert.equal(result.score, 10); // 8 + 5 - 3
+  assert.ok(result.reasons.includes('high open issue backlog'));
 });
