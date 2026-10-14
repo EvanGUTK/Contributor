@@ -10,7 +10,7 @@ Public GitHub content (issue text, PR descriptions, README, diffs) is **untruste
 - Fixed GitHub API host and relative paths. Validate owner/repo/PR input and link protocol/domain.
 - Escape title/body text before injecting into HTML. Do not render arbitrary issue Markdown as executable HTML.
 - Limit search requests, result length, timeout, and downloaded PR diff excerpts.
-- Store no AI keys or GitHub credentials in browser localStorage; local optional GitHub token stays in host environment.
+- Store no AI keys or GitHub credentials in browser localStorage; AI provider keys are stored encrypted server-side in Cloudflare KV (AES-GCM, per-user, requires GitHub login) and proxied through the Worker — they never touch the browser after initial entry.
 - Use minimal permissions for any future GitHub App; support revocation/deletion, source provenance, short-lived tokens, audience checks and signed callback state.
 - No automatic public comments, issue creation or PR review publishing.
 
