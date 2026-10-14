@@ -72,6 +72,8 @@ function byokNote(item, p) {
   try { tokens = estimateTokens(buildHandoffPrompt(item, p)); } catch { return ''; }
   return `<p class="byok-note">Prompt ~${tokens.toLocaleString('en-US')} tokens est. · Your AI provider bills you directly · Contributor charges nothing</p>`;
 }
+const COPY_LABEL = 'Copy AI prompt <span>↗</span>';
+const COPIED_RESET_MS = 2000;
 function card(item, p, i, saved = false) {
   const kind = describeOpportunity(item).replace(' opportunity', '');
   const match = item._match;
@@ -80,10 +82,11 @@ function card(item, p, i, saved = false) {
   const reasons = match.reasons.slice(0, 3).map(r => `<li>${escape(r)}</li>`).join('') || '<li>Matches the selected GitHub search criteria</li>';
   const summary = stripMarkdown(item.description || item.body || '');
   const warning = match.safetyFlags?.disclaimer ? `<p class="card-warning">⚠ ${escape(match.safetyFlags.disclaimer)}</p>` : '';
+  const viewLink = `<a class="btn btn-ghost" href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>`;
   const actions = saved
-    ? `<button type="button" class="remove-saved" data-index="${i}" aria-label="Remove ${escape(item.title || item.full_name || 'opportunity')} from saved">Remove</button>`
-    : `<button type="button" class="save-toggle" data-index="${i}" aria-pressed="${isSaved(item)}">${isSaved(item) ? 'Saved ✓' : 'Save'}</button><button type="button" class="copy-prompt" data-index="${i}">Copy prompt <span>↗</span></button>`;
-  return `<article class="result-card" data-index="${i}" tabindex="0" aria-haspopup="dialog"><div class="result-top"><span class="result-kind">${escape(kind)}</span><span class="match" title="Relevance score out of 100, not a success probability">${match.score} / 100</span></div><h3>${escape(item.title || item.full_name || 'Untitled')}</h3><p class="repo-name">${escape(repo)}</p><p class="result-desc">${escape(summary || 'Open on GitHub to inspect details and contribution requirements.')}</p><ul class="reasons">${reasons}</ul><div class="card-spacer"></div><div class="result-bottom"><a href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>${actions}</div>${warning}${saved ? '' : byokNote(item, p)}</article>`;
+    ? `${viewLink}<button type="button" class="remove-saved" data-index="${i}" aria-label="Remove ${escape(item.title || item.full_name || 'opportunity')} from saved">Remove</button>`
+    : `<button type="button" class="btn btn-primary copy-prompt" data-index="${i}" data-tooltip="Paste into Claude, Codex or Hermes to start contributing">${COPY_LABEL}</button><button type="button" class="save-toggle" data-index="${i}" aria-pressed="${isSaved(item)}">${isSaved(item) ? 'Saved ✓' : 'Save'}</button>${viewLink}`;
+  return `<article class="result-card" data-index="${i}" tabindex="0" aria-haspopup="dialog"><div class="result-top"><span class="result-kind">${escape(kind)}</span><span class="match" title="Relevance score out of 100, not a success probability">${match.score} / 100</span></div><h3>${escape(item.title || item.full_name || 'Untitled')}</h3><p class="repo-name">${escape(repo)}</p><p class="result-desc">${escape(summary || 'Open on GitHub to inspect details and contribution requirements.')}</p><ul class="reasons">${reasons}</ul><div class="card-spacer"></div><div class="result-bottom">${actions}</div>${warning}${saved ? '' : byokNote(item, p)}</article>`;
 }
 
 // Detail panel. Shows only what the item already carries: issues and reviews have no star data, so those rows are omitted.
@@ -195,7 +198,12 @@ function renderResults({ items, p }) {
   resultRoot.innerHTML = items.map((x, i) => card(x, p, i)).join('');
   resultRoot.querySelectorAll('.copy-prompt').forEach(el => el.addEventListener('click', async () => {
     const index = Number(el.dataset.index);
-    try { await navigator.clipboard.writeText(buildHandoffPrompt(items[index], p)); el.textContent = 'Copied ✓'; }
+    try {
+      await navigator.clipboard.writeText(buildHandoffPrompt(items[index], p));
+      el.textContent = 'Copied ✓';
+      clearTimeout(el.resetTimer);
+      el.resetTimer = setTimeout(() => { el.innerHTML = COPY_LABEL; }, COPIED_RESET_MS);
+    }
     catch { status.textContent = 'Clipboard unavailable; use an HTTPS origin or copy the GitHub link directly.'; }
   }));
   resultRoot.querySelectorAll('.save-toggle').forEach(el => el.addEventListener('click', () => {
