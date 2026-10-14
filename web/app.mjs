@@ -154,7 +154,7 @@ function detailHtml(item) {
   const warning = match.safetyFlags?.outsideReviewWelcome === false
     ? `<div class="panel-warning" role="note"><strong>⚠ Outside reviews may not be welcome</strong>${escape(match.safetyFlags.disclaimer || 'Check CONTRIBUTING.md before commenting.')}</div>` : '';
   return `${header}
-    <div class="panel-kind"><span class="result-kind">${escape(kind)}</span><span class="match">${match.score} / 100</span></div>
+    <div class="panel-kind"><span class="result-kind">${escape(kind)}</span><span class="match"><span class="panel-score">${match.score}</span> / 100</span></div>
     <h3 class="panel-title" id="panel-title">${escape(item.title || item.full_name || 'Untitled')}</h3>
     ${stats ? `<p class="panel-stats">${stats}</p>` : ''}
     ${license || activity ? `<div class="panel-meta">${license}${activity}</div>` : ''}
@@ -164,9 +164,22 @@ function detailHtml(item) {
     ${warning}${notes.map(n => `<p class="panel-note">${escape(n)}</p>`).join('')}
     <div class="panel-actions"><a class="btn btn-primary" href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a><button type="button" class="btn btn-text" id="panel-copy">Copy AI prompt</button></div>`;
 }
+// Count a number up from 0 with an ease-out curve. The final value is already in the markup, so skipping is safe.
+function animateCount(el, target, duration = 600) {
+  if (!el || !Number.isFinite(target) || !okToAnimate()) return;
+  const start = performance.now();
+  function tick(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    el.textContent = Math.round(Math.pow(progress, 0.5) * target);
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+  el.textContent = '0';
+  requestAnimationFrame(tick);
+}
 function openPanel(item, p) {
   panelReturnFocus = document.activeElement;
   panelBody.innerHTML = detailHtml(item);
+  animateCount(panelBody.querySelector('.panel-score'), Number(item._match.score));
   panel.setAttribute('aria-labelledby', 'panel-title');
   panel.removeAttribute('aria-label');
   panelBackdrop.hidden = false;
