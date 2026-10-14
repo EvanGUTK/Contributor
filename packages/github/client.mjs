@@ -13,7 +13,13 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined } = {}
     if (existing && Date.now() - existing.when < ttlMs) return existing.data;
     const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
     if (token) headers.Authorization = `Bearer ${token}`;
+    // Stale entries are revalidated; GitHub answers 304 without counting against the rate limit.
+    if (existing?.etag) headers['If-None-Match'] = existing.etag;
     const response = await fetchImpl(API + endpoint, { headers, signal: AbortSignal.timeout(12000) });
+    if (response.status === 304 && existing) {
+      existing.when = Date.now();
+      return existing.data;
+    }
     if (!response.ok) {
       const reset = response.headers?.get('x-ratelimit-reset');
       const wait = reset ? ` Retry after ${new Date(Number(reset) * 1000).toLocaleTimeString()}.` : '';
@@ -21,7 +27,7 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined } = {}
       throw new GitHubApiError(message, response.status, reset);
     }
     const data = await response.json();
-    cache.set(endpoint, { when: Date.now(), data });
+    cache.set(endpoint, { when: Date.now(), data, etag: response.headers?.get('etag') || null });
     return data;
   }
   async function fetchSearch(kind, preferences, limit, options) {
