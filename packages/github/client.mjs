@@ -62,11 +62,11 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined } = {}
     try {
       const listing = await request(`/repos/${owner}/${name}/contents/`);
       // A file or submodule response is an object, not a directory listing.
-      if (!Array.isArray(listing)) return [];
+      if (!Array.isArray(listing)) return null;
       return listing.slice(0, MAX_ROOT_ENTRIES).map(({ name: fileName, path, type, size }) => ({ name: fileName, path, type, size }));
     } catch (error) {
-      // GitHub answers 404 for the contents of an empty repository; the repository itself is verified separately by getRepo.
-      if (error instanceof GitHubApiError && error.status === 404) return [];
+      // GitHub answers 404 for an empty repository, but also when the listing is otherwise unreachable. null means "could not look", never "no files".
+      if (error instanceof GitHubApiError && error.status === 404) return null;
       throw error;
     }
   }

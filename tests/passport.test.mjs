@@ -125,12 +125,20 @@ test('getRepoFiles requests the read-only contents endpoint, trims fields and ca
   assert.deepEqual(urls, ['https://api.github.com/repos/example/app/contents/']);
 });
 
-test('getRepoFiles bounds the listing, treats empty-repo 404 as empty, and propagates other errors', async () => {
+test('getRepoFiles bounds the listing, reports unreadable listings as null, and propagates other errors', async () => {
   const many = Array.from({ length: 450 }, (_, i) => ({ name: `f${i}`, path: `f${i}`, type: 'file', size: 1 }));
   const respond = (status, body) => async () => ({ ok: status < 400, status, headers: { get: () => null }, json: async () => body });
   assert.equal((await createGitHubClient({ fetchImpl: respond(200, many) }).getRepoFiles('a', 'b')).length, 200);
-  assert.deepEqual(await createGitHubClient({ fetchImpl: respond(200, { type: 'file' }) }).getRepoFiles('a', 'b'), []);
-  assert.deepEqual(await createGitHubClient({ fetchImpl: respond(404, {}) }).getRepoFiles('a', 'b'), []);
+  assert.deepEqual(await createGitHubClient({ fetchImpl: respond(200, { type: 'file' }) }).getRepoFiles('a', 'b'), null);
+  assert.deepEqual(await createGitHubClient({ fetchImpl: respond(404, {}) }).getRepoFiles('a', 'b'), null);
   await assert.rejects(createGitHubClient({ fetchImpl: respond(403, {}) }).getRepoFiles('a', 'b'), error => error instanceof GitHubApiError && error.status === 403);
   await assert.rejects(createGitHubClient({ fetchImpl: respond(200, []) }).getRepoFiles('a/b', 'c'), /Invalid GitHub repository identifier/);
+});
+
+test('an unreadable root listing flows through the passport as unknown, not as missing files', async () => {
+  const client = createGitHubClient({ fetchImpl: async () => ({ ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) }) });
+  const s = summarize(repo(), await client.getRepoFiles('example', 'app'));
+  assert.equal(s.hasContributing, null);
+  assert.equal(s.aiPolicyDetected, null);
+  assert.ok(signalIds(s).includes('files-unavailable'));
 });
