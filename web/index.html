@@ -8,6 +8,18 @@
   <title>Contributor — Find your place in open source.</title>
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .saved-bar{display:flex;gap:18px;align-items:center;margin:0 0 16px}
+    .saved-bar button{border:1px solid #315747;border-radius:100px;background:#0d1b1b;color:#aaf5c9;font-size:12px;padding:9px 15px;cursor:pointer}
+    .saved-bar button:hover{border-color:#63d7a2}
+    .saved-bar button[hidden]{display:none}
+    #clear-saved{color:#f0a5a5;border-color:#6b3a3a}
+    .remove-saved{color:#f0a5a5;font-size:11px;background:none;border:0;cursor:pointer;padding:0}
+    .remove-saved:hover{text-decoration:underline}
+    .save-toggle{color:#a5eabf;font-size:11px;background:none;border:0;cursor:pointer;padding:0}
+    .save-toggle:hover{text-decoration:underline}
+    .save-toggle[aria-pressed="true"]{color:#88edb2;font-weight:700}
+  </style>
 </head>
 <body>
   <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
@@ -46,6 +58,7 @@
           <div class="form-footer"><label class="local-memory"><input id="remember" type="checkbox" /> Remember my filters on this device (optional)</label><button class="btn btn-primary" id="find" type="submit">Discover opportunities <span>→</span></button></div>
         </form>
         <div id="status" role="status" aria-live="polite" class="status-info">Fill in your interests and start your first search.</div>
+        <div class="saved-bar"><button type="button" id="saved-toggle" aria-pressed="false">Saved (0)</button><button type="button" id="clear-saved" hidden>Clear all saved</button></div>
         <section id="results" class="results" aria-label="Discovery results"></section>
       </section>
 
