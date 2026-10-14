@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty, calibrateExperience, EXPERIENCED_HOURS, QUICK_TASK_HOURS, IN_PROGRESS_PENALTY, scoreResponsiveness, RESPONSIVENESS_NOTE, OUTSIDE_REVIEW_DISCLAIMER, REVIEW_MIN_STARS, isMostlyNonEnglish } from '../packages/core/matching.mjs';
+import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty, calibrateExperience, EXPERIENCED_HOURS, QUICK_TASK_HOURS, IN_PROGRESS_PENALTY, scoreResponsiveness, RESPONSIVENESS_NOTE, OUTSIDE_REVIEW_DISCLAIMER, REVIEW_MIN_STARS, isMostlyNonEnglish, REVIEW_WINDOW_DAYS, DRAFT_PENALTY } from '../packages/core/matching.mjs';
 import { createGitHubClient, GitHubApiError } from '../packages/github/client.mjs';
 const example = { title: 'Handle empty arrays in image processing', body: 'Python OpenCV processing', html_url: 'https://github.com/example/vision/issues/42', repository_url: 'https://api.github.com/repos/example/vision', labels: [{ name: 'good first issue' }], updated_at: new Date().toISOString() };
 test('normalization is bounded and rejects invalid modes', () => {
@@ -216,4 +216,37 @@ test('non-English detection ignores empty text, emoji and a few accented letters
 test('only review opportunities carry the outside-review warning', () => {
   const m = scoreOpportunity(example, {}, { stargazers_count: 1 });
   assert.deepEqual(m.safetyFlags, { outsideReviewWelcome: true, disclaimer: null });
+});
+
+test('review search only asks for pull requests updated inside the review window', () => {
+  assert.equal(REVIEW_WINDOW_DAYS, 30);
+  assert.match(buildSearchQuery({}, 'reviews', { now: new Date('2026-03-01T00:00:00Z') }), / updated:>=2026-01-30(?: |$)/);
+});
+test('a small pull request gets a size bonus and a reason', () => {
+  const plain = scoreOpportunity(reviewPr(), {});
+  const small = scoreOpportunity(reviewPr({ changed_files: 3 }), {});
+  assert.equal(small.breakdown.size, 8);
+  assert.equal(small.score, plain.score + 8);
+  assert.ok(small.reasons.includes('Small diff — easy to start reviewing'));
+  assert.equal(scoreOpportunity(reviewPr({ changed_files: 30 }), {}).breakdown.size, 4);
+  assert.equal(scoreOpportunity(reviewPr({ changed_files: 120 }), {}).breakdown.size, 0);
+});
+test('a large pull request gets a size penalty and a reason', () => {
+  const plain = scoreOpportunity(reviewPr(), {});
+  const large = scoreOpportunity(reviewPr({ changed_files: 450 }), {});
+  assert.equal(large.breakdown.size, -5);
+  assert.equal(large.score, plain.score - 5);
+  assert.ok(large.reasons.includes('Large diff — set aside adequate time'));
+});
+test('an unknown diff size adds no size entry to the breakdown', () => {
+  assert.equal('size' in scoreOpportunity(reviewPr(), {}).breakdown, false);
+  assert.equal('size' in scoreOpportunity({ ...example, changed_files: 2 }, {}).breakdown, false, 'issues never get a size signal');
+});
+test('a draft pull request is penalized and explains why', () => {
+  const plain = scoreOpportunity(reviewPr(), {});
+  const draft = scoreOpportunity(reviewPr({ draft: true }), {});
+  assert.equal(DRAFT_PENALTY, 20);
+  assert.equal(draft.score, plain.score - DRAFT_PENALTY);
+  assert.ok(draft.reasons.includes('Draft PR — author may not want reviews yet'));
+  assert.equal(scoreOpportunity(reviewPr({ draft: false }), {}).score, plain.score);
 });
