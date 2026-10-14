@@ -74,6 +74,24 @@ function byokNote(item, p) {
   try { tokens = estimateTokens(buildHandoffPrompt(item, p)); } catch { return ''; }
   return `<p class="byok-note">Prompt ~${tokens.toLocaleString('en-US')} tokens est. · Your AI provider bills you directly · Contributor charges nothing</p>`;
 }
+// Read once per call so a mid-session OS setting change is honoured.
+const okToAnimate = () => !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const CARD_STAGGER_MS = 60;
+// Fade cards in one after another. Inline styles are cleared afterwards so the stylesheet's hover transitions apply again.
+function staggerCards() {
+  if (!okToAnimate()) return;
+  const cards = [...resultRoot.querySelectorAll('.result-card')];
+  cards.forEach(el => { el.style.opacity = '0'; el.style.transform = 'translateY(12px)'; el.style.transition = 'opacity 0.3s ease, transform 0.3s ease'; });
+  void resultRoot.offsetHeight; // commit the start state before transitioning
+  cards.forEach((el, i) => {
+    setTimeout(() => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; }, i * CARD_STAGGER_MS);
+    el.addEventListener('transitionend', function done(event) {
+      if (event.target !== el) return; // ignore transitions bubbling up from the card's buttons
+      el.removeEventListener('transitionend', done);
+      el.style.removeProperty('opacity'); el.style.removeProperty('transform'); el.style.removeProperty('transition');
+    });
+  });
+}
 const COPY_LABEL = 'Copy AI prompt <span>↗</span>';
 const COPIED_RESET_MS = 2000;
 function card(item, p, i, saved = false) {
@@ -198,6 +216,7 @@ let viewingSaved = false;
 function renderResults({ items, p }) {
   visibleItems = items; visiblePrefs = p;
   resultRoot.innerHTML = items.map((x, i) => card(x, p, i)).join('');
+  staggerCards();
   resultRoot.querySelectorAll('.copy-prompt').forEach(el => el.addEventListener('click', async () => {
     const index = Number(el.dataset.index);
     try {
@@ -219,6 +238,7 @@ function renderSaved() {
   if (!list.length) { resultRoot.innerHTML = '<div class="empty">Nothing saved yet. Use Save on a result to keep it on this device.</div>'; return; }
   visibleItems = list; visiblePrefs = null;
   resultRoot.innerHTML = list.map((x, i) => card(x, null, i, true)).join('');
+  staggerCards();
   resultRoot.querySelectorAll('.remove-saved').forEach(el => el.addEventListener('click', () => {
     const target = list[Number(el.dataset.index)];
     if (!writeSaved(readSaved().filter(x => x.html_url !== target.html_url))) status.textContent = 'Removing unavailable: this browser blocked local storage.';
