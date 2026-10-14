@@ -63,7 +63,7 @@ Make it easier to discover, understand and meaningfully contribute to open-sourc
 | F-03 | Find PR candidates for review | MVP | GitHub PR results and warnings about external feedback |
 | F-04 | Explain scoring | MVP | Match reasons and scoring breakdown in core; visible reasons in UI |
 | F-05 | Copy contextual prompt | MVP | Prompt includes selected verified URL and approval gate |
-| F-06 | MCP stdio tools | Alpha | Seven read-focused tools; live interoperability before release |
+| F-06 | MCP stdio tools | Alpha | Ten read-focused tools; live interoperability before release |
 | F-07 | Repository passport | Phase 2 | License, CONTRIBUTING, AI rules, maintainer responsiveness signals |
 | F-08 | Profile/memory opt-in | Phase 2 | Explicit scope and deletion; Hermes can send selected prefs today |
 | F-09 | AI Review Coach | Phase 3 | PR diffs, anchored findings, negative-case tests; drafts only |
