@@ -27,16 +27,16 @@ These correspond to the "Reviewable feature issues" section of `docs/product/ROA
 
 | # | Title | Roadmap item |
 |---|-------|--------------|
-| 1 | Improve GitHub discovery query diversity | `feat(search)` |
-| 2 | Build Repository Passport | `feat(passport)` |
-| 3 | Validate MCP v2 with four current stable clients | `test(mcp)` |
-| 4 | Add Hermes consent-based memory handoff | `feat(memory)` |
-| 5 | Design GitHub App read-only login | `feat(auth)` |
-| 6 | Implement evidence-based Review Coach | `feat(review)` |
-| 7 | Plan optional local CodeRabbit companion | `chore(review)` |
-| 8 | Document BYOK usage and spend limits | `feat(cost)` |
-| 9 | Design accessible GitHub browser extension | `feat(extension)` |
-| 10 | Certify static cost-free deployment | `chore(ops)` |
+| 3 | Improve GitHub discovery query diversity | `feat(search)` |
+| 4 | Build Repository Passport | `feat(passport)` |
+| 5 | Validate MCP v2 with four current stable clients | `test(mcp)` |
+| 6 | Add Hermes consent-based memory handoff | `feat(memory)` |
+| 7 | Design GitHub App read-only login | `feat(auth)` |
+| 8 | Implement evidence-based Review Coach | `feat(review)` |
+| 9 | Plan optional local CodeRabbit companion | `chore(review)` |
+| 10 | Document BYOK usage and spend limits | `feat(cost)` |
+| 11 | Design accessible GitHub browser extension | `feat(extension)` |
+| 12 | Certify static cost-free deployment | `chore(ops)` |
 
 ## Script behavior notes
 
