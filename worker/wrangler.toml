@@ -6,9 +6,9 @@ name = "contributor-auth"
 main = "auth.js"
 compatibility_date = "2026-10-14"
 
-routes = [
-  { pattern = "contributor-7cw.pages.dev/auth/*", zone_name = "pages.dev" }
-]
+# Routes removed: pages.dev is Cloudflare-managed and cannot be proxied via Worker routes.
+# The Worker runs on contributor-auth.workers.dev — update the GitHub App callback URL
+# and the static site's auth links to point there instead.
 
 # Public, non-secret setting: where the Worker redirects users after login/logout.
 [vars]
