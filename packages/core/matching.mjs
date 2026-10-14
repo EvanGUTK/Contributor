@@ -5,6 +5,8 @@ export const LEVELS = ['beginner', 'intermediate', 'advanced'];
 /** Issues with no activity inside this window are excluded from discovery as likely stale. */
 export const ACTIVITY_WINDOW_DAYS = 90;
 const DAY_MS = 86400000;
+/** Repository search tries at most this many interest words, one request each. */
+export const MAX_TOPIC_WORDS = 2;
 
 const normalize = value => String(value ?? '').toLowerCase().trim();
 const words = value => normalize(value).split(/[,\s]+/).filter(Boolean).slice(0, 12);
@@ -112,8 +114,14 @@ export function buildHandoffPrompt(item, preferences = {}) {
   ].join('\n');
 }
 
+/** Interest words safe to place in a repository query (no operators), in the order the user wrote them. */
+export function extractTopics(interests, max = MAX_TOPIC_WORDS) {
+  const topics = words(interests).filter(x => /^[a-z0-9-]{3,25}$/.test(x));
+  return [...new Set(topics)].slice(0, max);
+}
+
 /** Construct a GitHub search string from selected controls, never from raw query operators. */
-export function buildSearchQuery(prefs, kind, { now = new Date() } = {}) {
+export function buildSearchQuery(prefs, kind, { now = new Date(), topic } = {}) {
   const p = normalizePreferences(prefs);
   const language = p.languages[0] && LANGUAGES.some(x => x.toLowerCase() === p.languages[0].toLowerCase()) ? ` language:${p.languages[0].replace(/\+/g, '+')}` : '';
   // Do not append arbitrary user interests to issue search: it can crowd out otherwise relevant matches.
@@ -124,8 +132,8 @@ export function buildSearchQuery(prefs, kind, { now = new Date() } = {}) {
   }
   if (kind === 'reviews') return `is:pr is:open review:none${language}`;
   if (kind === 'repositories') {
-    const topic = words(p.interests).find(x => /^[a-z0-9-]{3,25}$/.test(x));
-    return `archived:false fork:false stars:>=10${language.replace('%2B', '+')}${topic ? ` ${topic}` : ''}`;
+    const chosen = topic === undefined ? extractTopics(p.interests, 1)[0] : extractTopics(topic, 1)[0];
+    return `archived:false fork:false stars:>=10${language.replace('%2B', '+')}${chosen ? ` ${chosen}` : ''}`;
   }
   throw new Error('Unknown discovery type');
 }

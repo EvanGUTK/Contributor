@@ -1,5 +1,5 @@
 /** Github public discovery: strictly read-only, bounded calls, transparent rate errors. */
-import { buildSearchQuery, normalizePreferences, projectIdFromIssue, scoreOpportunity } from '../core/matching.mjs';
+import { buildSearchQuery, extractTopics, normalizePreferences, projectIdFromIssue, scoreOpportunity } from '../core/matching.mjs';
 const API = 'https://api.github.com';
 
 export class GitHubApiError extends Error {
@@ -24,16 +24,28 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined } = {}
     cache.set(endpoint, { when: Date.now(), data });
     return data;
   }
-  async function search(kind, preferences, limit = 15) {
-    const q = buildSearchQuery(preferences, kind);
+  async function fetchSearch(kind, preferences, limit, options) {
+    const q = buildSearchQuery(preferences, kind, options);
     const endpoint = kind === 'repositories' ? '/search/repositories' : '/search/issues';
     const data = await request(`${endpoint}?q=${encodeURIComponent(q)}&sort=updated&order=desc&per_page=${Math.min(30, Math.max(1, limit))}`);
     return (data.items || []).slice(0, limit);
   }
+  async function search(kind, preferences, limit = 15) {
+    if (kind !== 'repositories') return fetchSearch(kind, preferences, limit);
+    const p = normalizePreferences(preferences);
+    const topics = extractTopics(p.interests);
+    if (topics.length < 2) return fetchSearch(kind, p, limit, { topic: topics[0] });
+    // One request per topic word; keep the set whose repositories match the profile best.
+    const settled = await Promise.allSettled(topics.map(topic => fetchSearch(kind, p, limit, { topic })));
+    const fulfilled = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
+    if (!fulfilled.length) throw settled[0].reason;
+    const total = items => items.reduce((sum, item) => sum + scoreOpportunity(item, p).score, 0);
+    return fulfilled.reduce((best, items) => (total(items) > total(best) ? items : best));
+  }
   async function discover(preferences, { limit = 12 } = {}) {
     const p = normalizePreferences(preferences);
     const kinds = p.mode === 'all' ? ['repositories', 'issues', 'reviews'] : [p.mode];
-    // Limit to three search requests; no background crawling of arbitrary GitHub repos.
+    // At most four search requests (repositories may try two topic words); no background crawling of arbitrary GitHub repos.
     const settled = await Promise.allSettled(kinds.map(kind => search(kind, p, limit)));
     const warnings = [];
     const raw = [];
