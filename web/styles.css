@@ -369,4 +369,5 @@ footer p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .btn, .result-card, .detail-panel, .panel-backdrop, .starter-body, .starter-chevron { transition: none; }
+  .spinner { animation: none; } /* the static ring still marks loading */
 }
