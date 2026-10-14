@@ -1,8 +1,9 @@
 import { normalizePreferences, buildHandoffPrompt, describeOpportunity } from './lib/matching.mjs';
-import { createGitHubClient, GitHubApiError } from './lib/github.mjs';
-// Anonymous direct calls by default; initAuth() swaps in the Worker proxy client once a signed-in session is confirmed.
-const anonymousClient = createGitHubClient();
-let client = anonymousClient;
+import { createGitHubClient } from './lib/github.mjs';
+// Direct anonymous calls by default; initAuth() sets proxyClient once a signed-in session is confirmed.
+// A failed proxy search clears proxyClient so later searches go direct.
+const directClient = createGitHubClient();
+let proxyClient = null;
 let proxyNote = '';
 const form = document.querySelector('#search-form');
 const resultRoot = document.querySelector('#results');
@@ -240,13 +241,12 @@ form.addEventListener('submit', async event => {
   status.textContent = 'Searching live GitHub repositories, issues and pull requests…'; resultRoot.replaceChildren(); lastResults = null; viewingSaved = false; updateSavedBar();
   try {
     let result;
-    try { result = await client.discover(p, { limit: 10 }); }
-    catch (err) {
-      // A session from before token proxying (or an expired token) is rejected by the Worker: fall back to anonymous calls instead of failing.
-      if (client === anonymousClient || !(err instanceof GitHubApiError) || err.status !== 401) throw err;
-      client = anonymousClient; proxyNote = 'Sign in again to restore enhanced rate limits.';
-      result = await client.discover(p, { limit: 10 });
+    if (proxyClient) {
+      // discover() rewrites upstream failures (a proxy 401 included) into its own error, so don't inspect status codes: any proxy failure falls back to direct calls once.
+      try { result = await proxyClient.discover(p, { limit: 10 }); }
+      catch { proxyClient = null; proxyNote = 'Enhanced rate limits unavailable; sign in again to restore them.'; }
     }
+    if (!result) result = await directClient.discover(p, { limit: 10 });
     const items = result.items.slice(0, 24);
     status.textContent = `${items.length} relevant public opportunities · Updated ${new Date(result.at).toLocaleTimeString()} · Scores indicate relevance, not success probability.${result.warnings.length ? ` Partial results: ${result.warnings.join('; ')}` : ''}${proxyNote ? ` ${proxyNote}` : ''}`;
     if (!items.length) { resultRoot.innerHTML = '<div class="empty">No current matches. Try a different language, topic or discovery mode.</div>'; return; }
@@ -283,7 +283,7 @@ async function initAuth() {
     document.querySelector('#signout').href = `${AUTH_BASE}/auth/logout`;
     userBox.hidden = false; root.hidden = false;
     // Signed in: route GitHub calls through the Worker, which attaches the session's token (5000 req/hr instead of 60).
-    client = createGitHubClient({ proxyBase: PROXY_BASE });
+    proxyClient = createGitHubClient({ proxyBase: PROXY_BASE });
     proxyNote = `✓ Signed in as ${user.login} · Enhanced rate limits active`;
     // Don't clobber a search that finished or started while the sign-in check was in flight.
     if (!lastResults && !btn.disabled) status.textContent = proxyNote;
