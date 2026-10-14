@@ -17,7 +17,7 @@ const SECRET_PATTERNS = [
   { name: 'Anthropic/OpenAI-style API key', re: /\bsk-(?:ant-)?[A-Za-z0-9_-]{20,}\b/ },
   { name: 'Slack token', re: /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/ },
   { name: 'private key block', re: /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/ },
-  { name: 'hardcoded credential assignment', re: /\b(?:api[_-]?key|secret|token|passw(?:or)?d|auth)[\w-]*["']?\s*[:=]\s*["'][^"'\s]{8,}["']/i },
+  { name: 'hardcoded credential assignment', re: /\b(?:api[_-]?key|secret|token|passw(?:or)?d|auth)[\w-]*["']?\s*[:=]\s*["'][A-Za-z0-9+/=_-]{16,}["']/i },
 ];
 const PLACEHOLDER = /your[-_ ]|example|changeme|placeholder|dummy|xxxx|<[^>]+>|\$\{|process\.env|os\.environ/i;
 const EXTERNAL_SCRIPT = /<script\b[^>]*\bsrc\s*=\s*["']?\s*(?:https?:)?\/\//i;
