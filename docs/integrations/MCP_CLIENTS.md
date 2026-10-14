@@ -17,7 +17,7 @@ Running `npm run mcp` directly will print a startup line to **stderr** and then 
 npx @modelcontextprotocol/inspector node apps/mcp/server.mjs
 ```
 
-Verify the server exposes seven tools and `discover_opportunities` returns actual GitHub results, or a clear rate-limit error. MCP v2 package is `@modelcontextprotocol/server` and supports the 2026-07-28 protocol line. For client setup, use an **absolute** path to `apps/mcp/server.mjs`.
+Verify the server exposes ten tools (`discover_opportunities`, `find_review_requests`, `inspect_repository`, `analyze_issue`, `analyze_pull_request`, `prepare_contribution`, `get_contribution_status`, `get_repository_passport`, `request_memory_handoff`, `prepare_review_checklist`) and `discover_opportunities` returns actual GitHub results, or a clear rate-limit error. MCP v2 package is `@modelcontextprotocol/server` and supports the 2026-07-28 protocol line. For client setup, use an **absolute** path to `apps/mcp/server.mjs`.
 
 ## Claude Code
 
