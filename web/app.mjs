@@ -503,7 +503,7 @@ form.addEventListener('submit', async event => {
       status.textContent = `Search unavailable: ${err instanceof Error ? err.message : 'Unknown error'}. Try again later or use GitHub Search directly.`;
       resultRoot.innerHTML = fallback;
     }
-  } finally { btn.disabled = false; btn.innerHTML = 'Discover opportunities <span>→</span>'; }
+  } finally { btn.disabled = false; btn.innerHTML = 'Discover opportunities <span>→</span>'; resetReviewTrigger(); }
 });
 
 // Ripple on primary buttons. Keyboard activation (detail 0) has no pointer position, so it starts from the centre.
@@ -531,6 +531,31 @@ document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click'
   form.elements.level.value = chip.dataset.level;
   form.requestSubmit();
 }));
+
+// One-click review search: switch to Code reviews mode and search with whatever languages and filters the form already holds.
+// The clicked trigger shows a loading label until the submit handler's finally block resets it.
+let reviewTrigger = null;
+function resetReviewTrigger() {
+  if (!reviewTrigger) return;
+  reviewTrigger.innerHTML = reviewTrigger.dataset.label;
+  reviewTrigger.disabled = false;
+  reviewTrigger.removeAttribute('aria-busy');
+  reviewTrigger = null;
+}
+function findReviews(event) {
+  if (btn.disabled) return;
+  const trigger = event.currentTarget;
+  form.elements.mode.value = 'reviews';
+  trigger.dataset.label = trigger.innerHTML;
+  trigger.textContent = 'Finding PRs…';
+  trigger.disabled = true;
+  trigger.setAttribute('aria-busy', 'true');
+  reviewTrigger = trigger;
+  // Scroll before submitting; html's scroll-behavior makes this smooth unless the user prefers reduced motion.
+  document.querySelector('#discover').scrollIntoView({ block: 'start' });
+  form.requestSubmit();
+}
+document.querySelectorAll('#review-now-btn, #quick-review-btn').forEach(el => el.addEventListener('click', findReviews));
 
 // Optional GitHub sign-in. The Worker owns the session cookie; this only reads the public identity.
 // Any failure (Worker down, blocked, bad payload) leaves the auth UI hidden: sign-in is never required.
