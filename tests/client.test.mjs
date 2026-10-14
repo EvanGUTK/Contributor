@@ -103,9 +103,9 @@ test('responses without an ETag are never sent a conditional header', async () =
 });
 
 test('errors are not cached or masked by a stored ETag', async () => {
-  const responses = [reply({ ok: 1 }, { etag: '"v1"' }), reply({}, { status: 403 })];
+  const responses = [reply({ ok: 1 }, { etag: '"v1"' }), ...Array(3).fill(reply({}, { status: 403 }))];
   let i = 0;
-  const client = createGitHubClient({ fetchImpl: async () => responses[i++] });
+  const client = createGitHubClient({ fetchImpl: async () => responses[i++], sleepFn: async () => {} });
   await client.request('/repos/a/b', { ttlMs: 0 });
   await assert.rejects(() => client.request('/repos/a/b', { ttlMs: 0 }), GitHubApiError);
 });
