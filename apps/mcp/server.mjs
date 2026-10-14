@@ -4,6 +4,7 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
 import { createGitHubClient } from '../../packages/github/client.mjs';
 import { normalizePreferences, buildHandoffPrompt, scoreOpportunity } from '../../packages/core/matching.mjs';
+import { getPassportSummary } from '../../packages/core/passport.mjs';
 
 const client = createGitHubClient({ token: process.env.CONTRIBUTOR_GITHUB_TOKEN || undefined });
 const prefsSchema = {
@@ -58,6 +59,15 @@ function createServer() {
       stars: data.stargazers_count, open_issues_count: data.open_issues_count, updated_at: data.updated_at,
       pushed_at: data.pushed_at, archived: data.archived, has_issues: data.has_issues,
       license: data.license?.spdx_id ?? 'Unknown', note: 'Read CONTRIBUTING.md, issue thread, linked PRs and AI policies before initiating work.' };
+  }));
+  server.registerTool('get_repository_passport', {
+    description: 'Summarize whether a public repository looks ready for outside contributors: CONTRIBUTING file, license, maintainer activity, AI policy file and setup effort. Read-only; does not guarantee maintainer acceptance.',
+    inputSchema: z.object({ owner: ownerSchema, repo: repoSchema })
+  }, safe(async ({ owner, repo }) => {
+    const data = await client.getRepo(owner, repo);
+    const files = await client.getRepoFiles(owner, repo);
+    return { repository: data.full_name, url: data.html_url, passport: getPassportSummary(data, files),
+      note: 'This passport does not guarantee maintainer acceptance. It only checks root file names and public metadata, so read CONTRIBUTING, the README and recent issue and PR threads before starting work.' };
   }));
   server.registerTool('analyze_issue', {
     description: 'Fetch factual issue context and produce a safe starter plan prompt. Deep code analysis is done by the connected AI assistant, not by this tool.',
