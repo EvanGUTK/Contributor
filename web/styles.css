@@ -243,6 +243,30 @@ section[id] { scroll-margin-top: 72px; }
 .similar-list a { display: block; font-size: 12px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; }
 .similar-list a:hover { color: var(--text-primary); text-decoration: underline; }
 .similar-repo { color: var(--text-muted); font-weight: 500; }
+/* BYOK AI explanation */
+.explain-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.explain-btn { font-size: 13px; padding: 8px 14px; }
+.byok-key { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.link-btn { background: none; border: 0; padding: 0; font-size: 12px; color: var(--accent-hover); cursor: pointer; }
+.link-btn:hover { color: var(--text-primary); text-decoration: underline; }
+.byok-form { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); }
+.byok-form[hidden] { display: none; }
+.byok-form label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+.byok-form input { background: var(--bg-panel); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; outline: none; font-size: 13px; }
+.byok-form input:focus { border-color: var(--accent-bright); box-shadow: 0 0 0 3px rgba(113, 112, 255, 0.2); }
+.byok-form input::placeholder { color: var(--text-subtle); }
+.panel-section .byok-help { font-size: 11px; line-height: 1.5; color: var(--text-subtle); }
+.panel-section .byok-help.byok-invalid { color: var(--danger); }
+.byok-form-actions { display: flex; gap: 8px; }
+.byok-form-actions .btn { font-size: 13px; padding: 6px 14px; }
+.explain-output:empty { display: none; }
+.explain-output { margin-top: 12px; }
+.explain-quote { margin: 0; padding-left: 12px; border-left: 3px solid var(--accent); font-style: italic; font-size: 14px; line-height: 1.6; color: var(--text-secondary); overflow-wrap: anywhere; }
+.panel-section .explain-loading { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+.panel-section .explain-error { font-size: 13px; color: var(--text-muted); }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent-bright); animation: spin 0.8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.panel-section .explain-disclaimer { margin-top: 8px; font-size: 11px; line-height: 1.5; color: var(--text-subtle); }
 .panel-actions { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
 .panel-actions .btn { width: 100%; }
 body.panel-open { overflow: hidden; }
