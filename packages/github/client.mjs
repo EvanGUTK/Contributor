@@ -93,10 +93,28 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined, sleep
     if (failed) warnings.push(`linked pull requests: could not check ${failed} issue${failed === 1 ? '' : 's'}; verify manually.`);
     return linked;
   }
+  /**
+   * Repository records for review results, keyed by "owner/name". GitHub's PR search cannot filter by stars, so the
+   * star count comes from the repository itself. One cached lookup per distinct repository, bounded concurrency;
+   * a failed lookup means "unknown" (never flagged as low) and never fails discovery.
+   */
+  async function lookupReviewRepos(reviews, known, warnings) {
+    const found = new Map();
+    let failed = 0;
+    const queue = [...new Set(reviews.map(projectIdFromIssue).filter(name => name && !known.has(name)))];
+    const worker = async () => {
+      for (let name = queue.shift(); name; name = queue.shift()) {
+        try { found.set(name, await getRepo(...name.split('/'))); } catch { failed += 1; }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(MAX_PARALLEL_LOOKUPS, queue.length) }, worker));
+    if (failed) warnings.push(`review safety: could not check star counts for ${failed} repositor${failed === 1 ? 'y' : 'ies'}; verify outside reviews are welcome.`);
+    return found;
+  }
   async function discover(preferences, { limit = 12 } = {}) {
     const p = normalizePreferences(preferences);
     const kinds = p.mode === 'all' ? ['repositories', 'issues', 'reviews'] : [p.mode];
-    // At most four search requests (repositories may try two topic words); no background crawling of arbitrary GitHub repos.
+    // At most four search requests (repositories may try two topic words) plus one cached repository lookup per distinct review repository; no background crawling of arbitrary GitHub repos.
     const settled = await Promise.allSettled(kinds.map(kind => search(kind, p, limit)));
     const warnings = [];
     const raw = [];
@@ -107,9 +125,10 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined, sleep
     if (!raw.length && warnings.length) throw new GitHubApiError(warnings.join(' '), 429);
     const repos = new Map(raw.filter(x => x._kind === 'repositories').map(x => [x.full_name, x]));
     const linked = await markLinkedPullRequests(raw.filter(x => x._kind === 'issues' && !x.pull_request), warnings);
+    const reviewRepos = await lookupReviewRepos(raw.filter(x => x._kind === 'reviews'), repos, warnings);
     const items = raw.map(item => {
       const repoName = projectIdFromIssue(item);
-      const repo = repoName ? repos.get(repoName) : item._kind === 'repositories' ? item : null;
+      const repo = repoName ? repos.get(repoName) ?? reviewRepos.get(repoName) : item._kind === 'repositories' ? item : null;
       const inProgress = linked.has(item);
       const result = scoreOpportunity(item, p, repo, { inProgress });
       return { ...item, _repoName: repoName || item.full_name, _inProgress: inProgress, _match: result };

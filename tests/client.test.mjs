@@ -225,9 +225,46 @@ test('a failed linked PR lookup leaves the issue listed, unflagged, with a warni
 
 test('review and repository results trigger no linked PR lookups', async () => {
   const queries = [];
-  const client = createGitHubClient({ fetchImpl: async url => { queries.push(queryOf(url)); return reply({ items: [{ ...issue(5), pull_request: {} }] }); } });
+  const client = createGitHubClient({ fetchImpl: async url => {
+    if (!new URL(url).pathname.startsWith('/search/')) return reply({ full_name: 'a/b', stargazers_count: 500 });
+    queries.push(queryOf(url));
+    return reply({ items: [{ ...issue(5), pull_request: {} }] });
+  } });
   await client.discover({ mode: 'reviews' });
   assert.equal(queries.length, 1);
+});
+
+const reviewPr = (n, repoName) => ({ ...issue(n, repoName), pull_request: {}, body: 'Handles empty input in the tokenizer.' });
+const reviewFetch = ({ prs, stars, calls = [] }) => async url => {
+  const { pathname } = new URL(url);
+  calls.push(pathname);
+  if (pathname.startsWith('/search/')) return reply({ items: prs });
+  const name = pathname.replace('/repos/', '');
+  return name in stars ? reply({ full_name: name, stargazers_count: stars[name], pushed_at: new Date().toISOString() }) : reply({}, { status: 404 });
+};
+
+test('review results get the outside-review warning from the repository star count, not from the search', async () => {
+  const calls = [];
+  const client = createGitHubClient({ fetchImpl: reviewFetch({ prs: [reviewPr(1, 'big/popular'), reviewPr(2, 'tiny/internal')], stars: { 'big/popular': 4000, 'tiny/internal': 3 }, calls }) });
+  const { items, warnings } = await client.discover({ mode: 'reviews' });
+  const flags = Object.fromEntries(items.map(i => [i._repoName, i._match.safetyFlags]));
+  assert.equal(flags['big/popular'].outsideReviewWelcome, true);
+  assert.equal(flags['tiny/internal'].outsideReviewWelcome, false);
+  assert.match(flags['tiny/internal'].disclaimer, /Check CONTRIBUTING\.md/);
+  assert.equal(items.length, 2, 'flagged results stay visible');
+  assert.deepEqual(warnings, []);
+});
+test('review discovery looks up each distinct repository once', async () => {
+  const calls = [];
+  const client = createGitHubClient({ fetchImpl: reviewFetch({ prs: [reviewPr(1, 'a/b'), reviewPr(2, 'a/b'), reviewPr(3, 'c/d')], stars: { 'a/b': 100, 'c/d': 100 }, calls }) });
+  await client.discover({ mode: 'reviews' });
+  assert.deepEqual(calls.filter(c => c.startsWith('/repos/')).sort(), ['/repos/a/b', '/repos/c/d']);
+});
+test('a failed star lookup is reported as unknown and never flags the review as low-star', async () => {
+  const client = createGitHubClient({ fetchImpl: reviewFetch({ prs: [reviewPr(1, 'gone/missing')], stars: {} }) });
+  const { items, warnings } = await client.discover({ mode: 'reviews' });
+  assert.equal(items[0]._match.safetyFlags.outsideReviewWelcome, true);
+  assert.match(warnings.join(' '), /review safety: could not check star counts for 1 repository/);
 });
 
 test('review discovery sends the selected language and no stars qualifier', async () => {
