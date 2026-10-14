@@ -85,7 +85,7 @@ function card(item, p, i, saved = false) {
   const viewLink = `<a class="btn btn-ghost" href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>`;
   const actions = saved
     ? `${viewLink}<button type="button" class="remove-saved" data-index="${i}" aria-label="Remove ${escape(item.title || item.full_name || 'opportunity')} from saved">Remove</button>`
-    : `<button type="button" class="btn btn-primary copy-prompt" data-index="${i}">${COPY_LABEL}</button><button type="button" class="save-toggle" data-index="${i}" aria-pressed="${isSaved(item)}">${isSaved(item) ? 'Saved ✓' : 'Save'}</button>${viewLink}`;
+    : `<button type="button" class="btn btn-primary copy-prompt" data-index="${i}" data-tooltip="Paste into Claude, Codex or Hermes to start contributing">${COPY_LABEL}</button><button type="button" class="save-toggle" data-index="${i}" aria-pressed="${isSaved(item)}">${isSaved(item) ? 'Saved ✓' : 'Save'}</button>${viewLink}`;
   return `<article class="result-card" data-index="${i}" tabindex="0" aria-haspopup="dialog"><div class="result-top"><span class="result-kind">${escape(kind)}</span><span class="match" title="Relevance score out of 100, not a success probability">${match.score} / 100</span></div><h3>${escape(item.title || item.full_name || 'Untitled')}</h3><p class="repo-name">${escape(repo)}</p><p class="result-desc">${escape(summary || 'Open on GitHub to inspect details and contribution requirements.')}</p><ul class="reasons">${reasons}</ul><div class="card-spacer"></div><div class="result-bottom">${actions}</div>${warning}${saved ? '' : byokNote(item, p)}</article>`;
 }
 
