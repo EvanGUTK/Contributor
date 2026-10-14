@@ -197,7 +197,7 @@ function closePanel() {
   panel.classList.remove('open'); panelBackdrop.classList.remove('open');
   panel.setAttribute('aria-hidden', 'true');
   document.body.classList.remove('panel-open');
-  setTimeout(() => { if (!panel.classList.contains('open')) panelBackdrop.hidden = true; }, 200);
+  setTimeout(() => { if (!panel.classList.contains('open')) panelBackdrop.hidden = true; }, 250); // matches the backdrop fade in styles.css
   if (panelReturnFocus?.isConnected) panelReturnFocus.focus();
 }
 panelClose.addEventListener('click', closePanel);
