@@ -2,11 +2,15 @@
 import { buildSearchQuery, extractTopics, normalizePreferences, projectIdFromIssue, scoreOpportunity } from '../core/matching.mjs';
 const API = 'https://api.github.com';
 const MAX_ROOT_ENTRIES = 200;
+const MAX_RETRIES = 2;
+const BASE_DELAY_MS = 1000;
+const realSleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const isRateLimited = status => status === 403 || status === 429;
 
 export class GitHubApiError extends Error {
-  constructor(message, status, reset = null) { super(message); this.name = 'GitHubApiError'; this.status = status; this.reset = reset; }
+  constructor(message, status, reset = null, retries = 0) { super(message); this.name = 'GitHubApiError'; this.status = status; this.reset = reset; this.retries = retries; }
 }
-export function createGitHubClient({ fetchImpl = fetch, token = undefined } = {}) {
+export function createGitHubClient({ fetchImpl = fetch, token = undefined, sleepFn = realSleep, onStatus = undefined } = {}) {
   const cache = new Map();
   async function request(endpoint, { ttlMs = 8 * 60_000 } = {}) {
     if (!endpoint.startsWith('/')) throw new Error('Only relative GitHub REST API paths are allowed');
@@ -16,7 +20,15 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined } = {}
     if (token) headers.Authorization = `Bearer ${token}`;
     // Stale entries are revalidated; GitHub answers 304 without counting against the rate limit.
     if (existing?.etag) headers['If-None-Match'] = existing.etag;
-    const response = await fetchImpl(API + endpoint, { headers, signal: AbortSignal.timeout(12000) });
+    let response;
+    let retry = 0;
+    // Exponential backoff (1s, 2s) on 403/429 before surfacing the rate-limit error.
+    for (;; retry += 1) {
+      response = await fetchImpl(API + endpoint, { headers, signal: AbortSignal.timeout(12000) });
+      if (!isRateLimited(response.status) || retry >= MAX_RETRIES) break;
+      onStatus?.(`Rate limited, retrying (${retry + 1}/${MAX_RETRIES})...`);
+      await sleepFn(BASE_DELAY_MS * 2 ** retry);
+    }
     if (response.status === 304 && existing) {
       existing.when = Date.now();
       return existing.data;
@@ -24,8 +36,9 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined } = {}
     if (!response.ok) {
       const reset = response.headers?.get('x-ratelimit-reset');
       const wait = reset ? ` Retry after ${new Date(Number(reset) * 1000).toLocaleTimeString()}.` : '';
-      const message = response.status === 403 || response.status === 429 ? `GitHub's rate limit or access policy blocked this search.${wait}` : `GitHub API returned ${response.status}.`;
-      throw new GitHubApiError(message, response.status, reset);
+      const tried = retry ? ` Gave up after ${retry}/${MAX_RETRIES} retries.` : '';
+      const message = isRateLimited(response.status) ? `GitHub's rate limit or access policy blocked this search.${wait}${tried}` : `GitHub API returned ${response.status}.`;
+      throw new GitHubApiError(message, response.status, reset, retry);
     }
     const data = await response.json();
     cache.set(endpoint, { when: Date.now(), data, etag: response.headers?.get('etag') || null });

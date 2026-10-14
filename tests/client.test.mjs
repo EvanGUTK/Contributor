@@ -103,9 +103,56 @@ test('responses without an ETag are never sent a conditional header', async () =
 });
 
 test('errors are not cached or masked by a stored ETag', async () => {
-  const responses = [reply({ ok: 1 }, { etag: '"v1"' }), reply({}, { status: 403 })];
+  const responses = [reply({ ok: 1 }, { etag: '"v1"' }), ...Array(3).fill(reply({}, { status: 403 }))];
   let i = 0;
-  const client = createGitHubClient({ fetchImpl: async () => responses[i++] });
+  const client = createGitHubClient({ fetchImpl: async () => responses[i++], sleepFn: async () => {} });
   await client.request('/repos/a/b', { ttlMs: 0 });
   await assert.rejects(() => client.request('/repos/a/b', { ttlMs: 0 }), GitHubApiError);
+});
+
+const sleeper = () => {
+  const delays = [];
+  return { delays, sleepFn: async ms => { delays.push(ms); } };
+};
+
+test('a rate-limited request retries with 1s then 2s backoff and succeeds on the second attempt', async () => {
+  const { delays, sleepFn } = sleeper();
+  const responses = [reply({}, { status: 429 }), reply({ id: 7 })];
+  let calls = 0;
+  const client = createGitHubClient({ fetchImpl: async () => responses[calls++], sleepFn });
+  assert.deepEqual(await client.request('/repos/a/b'), { id: 7 });
+  assert.equal(calls, 2);
+  assert.deepEqual(delays, [1000]);
+});
+
+test('a 403 is retried twice with doubling delays before throwing GitHubApiError', async () => {
+  const { delays, sleepFn } = sleeper();
+  let calls = 0;
+  const client = createGitHubClient({ fetchImpl: async () => { calls += 1; return reply({}, { status: 403 }); }, sleepFn });
+  await assert.rejects(() => client.request('/repos/a/b'), error => error instanceof GitHubApiError && error.status === 403 && error.retries === 2);
+  assert.equal(calls, 3);
+  assert.deepEqual(delays, [1000, 2000]);
+});
+
+test('non-rate-limit errors are not retried', async () => {
+  const { delays, sleepFn } = sleeper();
+  let calls = 0;
+  const client = createGitHubClient({ fetchImpl: async () => { calls += 1; return reply({}, { status: 500 }); }, sleepFn });
+  await assert.rejects(() => client.request('/repos/a/b'), error => error instanceof GitHubApiError && error.retries === 0);
+  assert.equal(calls, 1);
+  assert.deepEqual(delays, []);
+});
+
+test('status messages report each retry attempt and the final error names the attempt count', async () => {
+  const statuses = [];
+  const client = createGitHubClient({ fetchImpl: async () => reply({}, { status: 429 }), sleepFn: async () => {}, onStatus: m => statuses.push(m) });
+  await assert.rejects(() => client.request('/repos/a/b'), error => /Gave up after 2\/2 retries/.test(error.message));
+  assert.deepEqual(statuses, ['Rate limited, retrying (1/2)...', 'Rate limited, retrying (2/2)...']);
+});
+
+test('a request that succeeds first time reports no retry status', async () => {
+  const statuses = [];
+  const client = createGitHubClient({ fetchImpl: async () => reply({ ok: 1 }), sleepFn: async () => { throw new Error('must not sleep'); }, onStatus: m => statuses.push(m) });
+  await client.request('/repos/a/b');
+  assert.deepEqual(statuses, []);
 });
