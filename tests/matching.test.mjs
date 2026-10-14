@@ -198,6 +198,11 @@ test('a mostly non-ASCII review description is flagged even for a popular reposi
 test('a clean review in an established repository is welcome with no disclaimer', () => {
   assert.deepEqual(safety(reviewPr(), REVIEW_MIN_STARS), { outsideReviewWelcome: true, disclaimer: null });
 });
+test('a review in an archived repository is flagged even with many stars and English text', () => {
+  const m = scoreOpportunity(reviewPr(), {}, { stargazers_count: 9000, archived: true });
+  assert.equal(m.safetyFlags.outsideReviewWelcome, false);
+  assert.equal(m.safetyFlags.disclaimer, OUTSIDE_REVIEW_DISCLAIMER);
+});
 test('an unknown star count is not treated as low', () => {
   assert.equal(safety(reviewPr(), undefined).outsideReviewWelcome, true);
 });

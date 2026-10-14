@@ -111,7 +111,8 @@ export function assessReviewSafety(item, repo, text) {
   if (!item.pull_request) return welcome;
   const stars = repo?.stargazers_count;
   const lowStars = Number.isFinite(stars) && stars < REVIEW_MIN_STARS;
-  if (!lowStars && !isMostlyNonEnglish(text)) return welcome;
+  // Archived repositories are read-only on GitHub: pull requests there cannot take new reviews.
+  if (!lowStars && !repo?.archived && !isMostlyNonEnglish(text)) return welcome;
   return { outsideReviewWelcome: false, disclaimer: OUTSIDE_REVIEW_DISCLAIMER };
 }
 
