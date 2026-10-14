@@ -128,7 +128,7 @@ async function handleLogin(env) {
   const signedState = await sign(env, { state, exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS });
   const authorize = new URL(GITHUB_AUTHORIZE_URL);
   authorize.searchParams.set('client_id', env.GITHUB_CLIENT_ID);
-  authorize.searchParams.set('redirect_uri', `${appOrigin(env)}/auth/callback`);
+  authorize.searchParams.set('redirect_uri', `${new URL(request.url).origin}/auth/callback`);
   authorize.searchParams.set('scope', 'read:user');
   authorize.searchParams.set('state', state);
   return redirect(authorize.toString(), [cookie(STATE_COOKIE, signedState, STATE_TTL_SECONDS)]);
@@ -147,7 +147,7 @@ async function handleCallback(request, env, url) {
       client_id: env.GITHUB_CLIENT_ID,
       client_secret: env.GITHUB_CLIENT_SECRET,
       code,
-      redirect_uri: `${appOrigin(env)}/auth/callback`,
+      redirect_uri: `${new URL(request.url).origin}/auth/callback`,
     }),
   });
   if (!tokenResponse.ok) return errorRedirect(env);

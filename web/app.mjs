@@ -632,6 +632,17 @@ document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click'
   form.requestSubmit();
 }));
 
+// One-click "Find me a PR to review" buttons.
+function triggerReviewSearch() {
+  if (btn.disabled) return;
+  form.elements.mode.value = 'reviews';
+  document.querySelector('input[name="mode"][value="reviews"]').checked = true;
+  document.querySelector('#discover')?.scrollIntoView({ behavior: 'smooth' });
+  form.requestSubmit();
+}
+document.getElementById('review-now-btn')?.addEventListener('click', triggerReviewSearch);
+document.getElementById('quick-review-btn')?.addEventListener('click', triggerReviewSearch);
+
 // Optional GitHub sign-in. The Worker owns the session cookie; this only reads the public identity.
 // Any failure (Worker down, blocked, bad payload) leaves the auth UI hidden: sign-in is never required.
 const AUTH_BASE = 'https://contributor-auth.evan-workspace.workers.dev';

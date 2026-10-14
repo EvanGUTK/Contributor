@@ -3,75 +3,55 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#08090a" />
-  <meta name="description" content="Contributor finds meaningful open-source repositories, beginner-friendly issues and pull requests worth reviewing — free, open source and AI-provider independent." />
-  <title>Contributor — Find your place in open source.</title>
-  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
-  <link rel="canonical" href="https://contributor-7cw.pages.dev/" />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://contributor-7cw.pages.dev/" />
-  <meta property="og:title" content="Contributor — Find your place in open source" />
-  <meta property="og:description" content="Discover meaningful GitHub repositories, issues and pull requests matched to your skills. Free, open source, BYOK AI." />
-  <meta property="og:image" content="https://contributor-7cw.pages.dev/assets/contributor-banner.svg" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Contributor — Find your place in open source" />
-  <meta name="twitter:description" content="Discover meaningful GitHub repositories, issues and pull requests matched to your skills. Free, open source, BYOK AI." />
-  <meta name="twitter:image" content="https://contributor-7cw.pages.dev/assets/contributor-banner.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css" />
+  <title>Contributor — Under Maintenance</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #08090a;
+      color: #f7f8f8;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 24px;
+    }
+    .logo { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 48px; color: #f7f8f8; }
+    .logo span { color: #5e6ad2; }
+    .icon { font-size: 48px; margin-bottom: 24px; }
+    h1 { font-size: 36px; font-weight: 600; letter-spacing: -0.8px; margin-bottom: 16px; color: #f7f8f8; }
+    p { font-size: 16px; color: #8a8f98; line-height: 1.6; max-width: 420px; margin: 0 auto; }
+    .badge {
+      margin-top: 40px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 13px;
+      color: #d0d6e0;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; display: inline-block; }
+    a { color: #7170ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .footer { margin-top: 48px; font-size: 12px; color: #62666d; }
+  </style>
 </head>
 <body>
-  <div class="shell">
-    <header class="topbar">
-      <a href="#" class="brand" aria-label="Contributor home"><span class="brandmark" aria-hidden="true">C</span> contributor<span class="branddot">.</span></a>
-      <nav aria-label="Main navigation" class="nav"><a href="#discover">Discover</a><a href="#how">How it works</a><a href="./setup.html">Setup</a><a href="https://github.com/EvanGUTK/contributor" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav>
-      <div class="top-right">
-        <span class="top-status">Community-first · Open source</span>
-        <div class="auth" id="auth" hidden>
-          <a class="btn btn-signin" id="signin" href="#" aria-label="Sign in with GitHub" hidden><svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><span>Sign in<span class="signin-long"> with GitHub</span></span></a>
-          <div class="auth-user" id="auth-user" hidden><img id="auth-avatar" alt="" width="28" height="28" referrerpolicy="no-referrer" /><span class="auth-name" id="auth-name"></span><a class="auth-signout" id="signout" href="#">Sign out</a></div>
-        </div>
-      </div>
-    </header>
-
-    <main>
-      <section class="hero" aria-labelledby="hero-title">
-        <h1 id="hero-title">Find your next <span class="nowrap">open-source</span> contribution.</h1>
-        <p class="hero-sub">Search real GitHub repositories, issues and pull requests. Ranked by relevance. No account required.</p>
-        <div class="hero-actions"><a class="btn btn-primary" href="#discover">Start discovering <span aria-hidden="true">→</span></a><a class="btn btn-text" href="https://github.com/EvanGUTK/contributor" target="_blank" rel="noopener noreferrer">View on GitHub <span aria-hidden="true">↗</span></a></div>
-        <div class="hero-or" aria-hidden="true"><span>or</span></div>
-        <button type="button" class="review-now-btn" id="review-now-btn"><span aria-hidden="true">👁</span> Find me a PR to review right now <span aria-hidden="true">→</span></button>
-        <ul class="hero-pills" aria-label="Highlights"><li>⭐ Ranked results</li><li>🔒 Read-only</li><li>✦ Free forever</li></ul>
-      </section>
-
-      <section class="finder" id="discover" aria-labelledby="finder-title">
-        <div class="section-head"><div><p class="eyebrow">01 / DISCOVER</p><h2 id="finder-title">Your next contribution starts here.</h2><p>Rank real, current public GitHub results against your interests. No account required.</p></div><span class="read-only">Read-only by design</span></div>
-        <form id="search-form" class="filter-panel">
-          <div class="field"><label for="languages">YOUR LANGUAGES</label><input id="languages" name="languages" placeholder="Python, TypeScript, Rust…" value="Python" maxlength="160" /></div>
-          <div class="field field-wide"><label for="interests">WHAT INTERESTS YOU?</label><input id="interests" name="interests" placeholder="AI, robotics, quantum computing, developer tools…" value="AI computer vision" maxlength="120" /></div>
-          <div class="field"><label for="level">EXPERIENCE LEVEL</label><select id="level" name="level"><option value="beginner">Learning / Beginner</option><option value="intermediate" selected>Intermediate</option><option value="advanced">Advanced</option></select></div>
-          <div class="field"><label for="hours">TIME AVAILABLE</label><select id="hours" name="hours"><option value="2">1–2 hours</option><option value="4" selected>Half a day</option><option value="8">A full day</option><option value="16">A weekend</option><option value="40">Longer project</option></select></div>
-          <fieldset class="mode-field"><legend>WHAT ARE YOU LOOKING FOR?</legend><div class="modes"><label><input type="radio" name="mode" value="all" checked /><span>Everything</span></label><label><input type="radio" name="mode" value="repositories" /><span>Repositories</span></label><label><input type="radio" name="mode" value="issues" /><span>Issues</span></label><label><input type="radio" name="mode" value="reviews" /><span>Code reviews</span></label></div><button type="button" class="quick-review-chip" id="quick-review-btn"><span aria-hidden="true">⚡</span> Quick: Find PRs to review</button></fieldset>
-          <div class="examples"><span class="examples-label" id="examples-label">Try an example →</span><div class="chips" role="group" aria-labelledby="examples-label"><button type="button" class="chip" data-languages="Python" data-interests="AI" data-level="beginner">Python · AI · Beginner</button><button type="button" class="chip" data-languages="TypeScript" data-interests="DevTools" data-level="intermediate">TypeScript · DevTools · Intermediate</button><button type="button" class="chip" data-languages="Rust" data-interests="Systems" data-level="advanced">Rust · Systems · Advanced</button></div></div>
-          <div class="form-footer"><label class="local-memory"><input id="remember" type="checkbox" /> Remember my filters on this device (optional)</label><button class="btn btn-primary" id="find" type="submit">Discover opportunities <span>→</span></button></div>
-        </form>
-        <div id="status" role="status" aria-live="polite" class="status-info">Fill in your interests and start your first search.</div>
-        <div class="saved-bar"><button type="button" id="saved-toggle" aria-pressed="false">Saved (0)</button><button type="button" id="clear-saved" hidden>Clear all saved</button></div>
-        <section id="results" class="results" aria-label="Discovery results"></section>
-      </section>
-
-      <section id="how" class="how" aria-labelledby="how-title"><div class="section-head"><div><p class="eyebrow">02 / THE WORKFLOW</p><h2 id="how-title">From curious to contributor.</h2></div></div><div class="steps"><article><span>01</span><h3>Tell us your interests</h3><p>Pick skills, topics, time and the kind of contribution you enjoy.</p></article><article><span>02</span><h3>We discover the work</h3><p>GitHub's real repository and PR data, ranked with explanations rather than opaque AI scores.</p></article><article><span>03</span><h3>Choose a path</h3><p>Follow a repo, investigate an issue or practice evidence-based code review.</p></article><article><span>04</span><h3>Bring your assistant</h3><p>Copy a ready-to-use, approval-first prompt into Claude, Codex, OpenCode or Hermes.</p></article></div></section>
-      <section class="bottom-cta"><div><p class="eyebrow">BUILT TO GIVE BACK</p><h2>Open source should be easier to enter.</h2><p>No paywall for discovery. No surprise AI bills. No automated spam comments.</p></div><a href="#discover" class="btn btn-primary">Explore GitHub work ↗</a></section>
-    </main>
-    <footer><span class="footer-name">contributor<span>.</span></span><p>Open source · BYOK-first · User-approved publishing</p><span>Built for the next generation of contributors.</span></footer>
+  <div class="logo">contributor<span>.</span></div>
+  <div class="icon">🔧</div>
+  <h1>Under Maintenance</h1>
+  <p>We're making improvements to give you a better experience. Check back soon.</p>
+  <div class="badge">
+    <span class="dot"></span>
+    Back shortly
   </div>
-  <div class="panel-backdrop" id="panel-backdrop" hidden></div>
-  <aside class="detail-panel" id="detail-panel" role="dialog" aria-modal="true" aria-label="Opportunity details" aria-hidden="true" tabindex="-1">
-    <button type="button" class="panel-close" id="panel-close" aria-label="Close details">×</button>
-    <div class="panel-body" id="panel-body"></div>
-  </aside>
-  <script type="module" src="./app.mjs"></script>
+  <p class="footer" style="margin-top:32px">
+    Follow progress on <a href="https://github.com/EvanGUTK/Contributor" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+  </p>
 </body>
 </html>
