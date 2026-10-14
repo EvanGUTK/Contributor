@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Contributor",
+  "version": "0.1.0",
+  "description": "Find your next open-source contribution. Early scaffold: shows a Contributor badge on GitHub issue pages.",
+  "permissions": ["activeTab"],
+  "action": {
+    "default_title": "Contributor",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*/*/issues/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "contributor@evangutk.github.io",
+      "strict_min_version": "128.0"
+    }
+  }
+}
