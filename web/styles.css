@@ -307,7 +307,12 @@ footer p { margin: 0; }
   .detail-panel { transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s linear 0.35s; }
   .detail-panel.open { transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s; }
   .panel-backdrop { transition: opacity 0.25s ease; }
+  /* Click ripple. The host clips it instead of the button, so the Copy AI prompt tooltip is not cut off. */
+  .btn-primary { position: relative; }
+  .btn-ripple-host { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+  .btn-ripple { position: absolute; border-radius: 50%; background: rgba(255, 255, 255, 0.2); transform: scale(0); animation: ripple 0.5s ease-out forwards; pointer-events: none; }
 }
+@keyframes ripple { to { transform: scale(4); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

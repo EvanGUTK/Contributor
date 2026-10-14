@@ -311,6 +311,23 @@ form.addEventListener('submit', async event => {
   } finally { btn.disabled = false; btn.innerHTML = 'Discover opportunities <span>→</span>'; }
 });
 
+// Ripple on primary buttons. Keyboard activation (detail 0) has no pointer position, so it starts from the centre.
+document.addEventListener('click', event => {
+  const target = event.target.closest('.btn-primary');
+  if (!target || !okToAnimate()) return;
+  const rect = target.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height);
+  const x = event.detail ? event.clientX - rect.left : rect.width / 2;
+  const y = event.detail ? event.clientY - rect.top : rect.height / 2;
+  let host = target.querySelector(':scope > .btn-ripple-host');
+  if (!host) { host = document.createElement('span'); host.className = 'btn-ripple-host'; host.setAttribute('aria-hidden', 'true'); target.appendChild(host); }
+  const ripple = document.createElement('span');
+  ripple.className = 'btn-ripple';
+  Object.assign(ripple.style, { width: `${size}px`, height: `${size}px`, left: `${x - size / 2}px`, top: `${y - size / 2}px` });
+  host.appendChild(ripple);
+  ripple.addEventListener('animationend', () => ripple.remove());
+});
+
 // Example chips pre-fill the filter fields and run the search immediately.
 document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => {
   if (btn.disabled) return;
