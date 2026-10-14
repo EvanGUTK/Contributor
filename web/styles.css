@@ -268,6 +268,9 @@ section[id] { scroll-margin-top: 72px; }
 .byok-form input::placeholder { color: var(--text-subtle); }
 .panel-section .byok-help { font-size: 11px; line-height: 1.5; color: var(--text-subtle); }
 .panel-section .byok-help.byok-invalid { color: var(--danger); }
+.panel-section .byok-signin { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
+.byok-signin a { color: var(--accent-hover); }
+.byok-signin a:hover { color: var(--text-primary); }
 .byok-form-actions { display: flex; gap: 8px; }
 .byok-form-actions .btn { font-size: 13px; padding: 6px 14px; }
 .explain-output:empty { display: none; }
