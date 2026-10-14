@@ -1,5 +1,26 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>Contributor</title></head>
-<body><script src="popup.js"></script></body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contributor</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 16px; width: 280px; font: 14px/1.5 system-ui, sans-serif; }
+    h1 { margin: 0 0 8px; font-size: 16px; }
+    p { margin: 0 0 12px; }
+    a { color: LinkText; }
+    a:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+    .note { font-size: 12px; opacity: 0.8; margin: 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Contributor</h1>
+    <p>Contributor — find your next contribution</p>
+    <p><a id="open-app" href="#" target="_blank" rel="noopener noreferrer">Open the web app</a></p>
+    <p class="note">Early scaffold: no GitHub data is read or sent yet.</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
 </html>
