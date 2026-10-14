@@ -54,7 +54,7 @@ function card(item, p, i, saved = false) {
   const href = /^https:\/\/github\.com\//.test(item.html_url) ? item.html_url : '#';
   const reasons = match.reasons.slice(0, 3).map(r => `<li>${escape(r)}</li>`).join('') || '<li>Matches the selected GitHub search criteria</li>';
   const summary = (item.description || item.body || '').replace(/\s+/g, ' ').slice(0, 235);
-  return `<article class="result-card"><div class="result-top"><span class="result-kind">${escape(kind)}</span><span class="match"><b>${match.score}</b><small> / 100 relevance</small></span></div><h3>${escape(item.title || item.full_name || 'Untitled')}</h3><p class="repo-name">${escape(repo)}</p><p class="result-desc">${escape(summary || 'Open on GitHub to inspect details and contribution requirements.')}</p><ul class="reasons">${reasons}</ul><div class="result-bottom"><a href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>${saved ? `<button type="button" class="remove-saved" data-index="${i}" aria-label="Remove ${escape(item.title || item.full_name || 'opportunity')} from saved">Remove</button>` : `<button type="button" class="save-toggle" data-index="${i}" aria-pressed="${isSaved(item)}">${isSaved(item) ? 'Saved ✓' : 'Save'}</button><button type="button" class="copy-prompt" data-index="${i}">Copy AI prompt <span>↗</span></button>`}</div>${saved ? '' : byokNote(item, p)}</article>`;
+  return `<article class="result-card"><div class="result-top"><span class="result-kind">${escape(kind)}</span><span class="match" title="Relevance score out of 100, not a success probability"><b>${match.score}</b><small>/100 relevance</small></span></div><h3>${escape(item.title || item.full_name || 'Untitled')}</h3><p class="repo-name">${escape(repo)}</p><p class="result-desc">${escape(summary || 'Open on GitHub to inspect details and contribution requirements.')}</p><ul class="reasons">${reasons}</ul><div class="result-bottom"><a href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>${saved ? `<button type="button" class="remove-saved" data-index="${i}" aria-label="Remove ${escape(item.title || item.full_name || 'opportunity')} from saved">Remove</button>` : `<button type="button" class="save-toggle" data-index="${i}" aria-pressed="${isSaved(item)}">${isSaved(item) ? 'Saved ✓' : 'Save'}</button><button type="button" class="copy-prompt" data-index="${i}">Copy AI prompt <span>↗</span></button>`}</div>${saved ? '' : byokNote(item, p)}</article>`;
 }
 let lastResults = null;
 let viewingSaved = false;
@@ -116,3 +116,30 @@ form.addEventListener('submit', async event => {
     resultRoot.innerHTML = `<div class="empty"><a href="https://github.com/search?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22&type=issues" target="_blank" rel="noopener noreferrer">Continue searching on GitHub ↗</a></div>`;
   } finally { btn.disabled = false; btn.innerHTML = 'Discover opportunities <span>→</span>'; }
 });
+
+// Optional GitHub sign-in. The Worker owns the session cookie; this only reads the public identity.
+// Any failure (Worker down, blocked, bad payload) leaves the auth UI hidden: sign-in is never required.
+const AUTH_BASE = 'https://contributor-auth.evan-workspace.workers.dev';
+const AVATAR_PREFIX = 'https://avatars.githubusercontent.com/';
+async function initAuth() {
+  const root = document.querySelector('#auth');
+  const signIn = document.querySelector('#signin');
+  const userBox = document.querySelector('#auth-user');
+  if (!root || !signIn || !userBox) return;
+  try {
+    const res = await fetch(`${AUTH_BASE}/auth/user`, { credentials: 'include', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5000) });
+    if (res.status === 401) {
+      signIn.href = `${AUTH_BASE}/auth/login`; signIn.hidden = false; root.hidden = false;
+      return;
+    }
+    if (!res.ok) return;
+    const user = await res.json();
+    if (user?.authenticated !== true || typeof user.login !== 'string' || !user.login) return;
+    document.querySelector('#auth-name').textContent = user.login;
+    const avatar = document.querySelector('#auth-avatar');
+    if (typeof user.avatar_url === 'string' && user.avatar_url.startsWith(AVATAR_PREFIX)) avatar.src = user.avatar_url; else avatar.hidden = true;
+    document.querySelector('#signout').href = `${AUTH_BASE}/auth/logout`;
+    userBox.hidden = false; root.hidden = false;
+  } catch {}
+}
+initAuth();
