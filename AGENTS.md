@@ -1,0 +1,3 @@
+# Contributor — all coding agents
+
+Follow `CLAUDE.md`, `docs/product/PRD.md`, `docs/product/COSTS_AND_BYOK.md` and `docs/engineering/SECURITY.md`. The main user experience is zero-cost GitHub opportunity *discovery* followed by human-approved agent handoff. Do not convert it into an AI-only issue analyzer or write-enabled GitHub bot. Enforce read-only calls, bounded search, key privacy and honest rate-limit handling. For PRs, provide reproducible tests and specify which capabilities were verified versus only documented. Existing provider subscriptions and local agent memories stay under the user's control. Nothing publishes without explicit approval.

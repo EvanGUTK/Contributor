@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-label="Contributor — find your place in open source">
+<defs><linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#071c19"/><stop offset=".65" stop-color="#0c1522"/><stop offset="1" stop-color="#131524"/></linearGradient><linearGradient id="line" x1="0" x2="1"><stop stop-color="#59cb89"/><stop offset="1" stop-color="#6feac2"/></linearGradient><pattern id="dots" width="27" height="27" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#8df9bc" opacity=".10"/></pattern></defs>
+<rect width="1200" height="340" rx="12" fill="url(#bg)"/><rect width="1200" height="340" rx="12" fill="url(#dots)"/>
+<g stroke="#4ab68b" stroke-width="2" fill="none" opacity=".6"><path d="M98 80L232 113L281 237L149 262L98 80"/><path d="M232 113L358 70L389 214L281 237"/><path d="M149 262L281 237"/></g>
+<g fill="#0f372b" stroke="#6be6ab" stroke-width="2"><circle cx="98" cy="80" r="14"/><circle cx="232" cy="113" r="16"/><circle cx="281" cy="237" r="17"/><circle cx="149" cy="262" r="13"/><circle cx="358" cy="70" r="12"/><circle cx="389" cy="214" r="11"/></g>
+<g fill="#a5f1c9" font-size="12" font-family="monospace"><text x="81" y="84">01</text><text x="215" y="117">02</text><text x="264" y="241">03</text><text x="132" y="266">04</text></g>
+<rect x="523" y="63" width="9" height="9" rx="2" fill="#76edae"/><text x="549" y="73" fill="#8ee6b4" font-size="19" letter-spacing="3" font-family="Arial,sans-serif" font-weight="700">THE OPEN SOURCE OPPORTUNITY ENGINE</text>
+<text x="517" y="181" fill="#f1faf5" font-size="101" font-family="Arial,Helvetica,sans-serif" font-weight="800" letter-spacing="-5">contributor<tspan fill="#7af2b7">.</tspan></text>
+<text x="524" y="233" fill="#c5dbd0" font-size="26" font-family="Arial,sans-serif">Discover. Understand. Contribute.</text>
+<path d="M524 255H1088" stroke="url(#line)" stroke-width="2"/><text x="524" y="287" fill="#8ddcb7" font-size="16" font-family="monospace">GITHUB  /  MCP  /  MEMORY-AWARE  /  BYOK  /  OPEN SOURCE</text>
+</svg>
