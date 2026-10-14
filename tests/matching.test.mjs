@@ -180,8 +180,9 @@ const safety = (item, stars) => scoreOpportunity(item, {}, stars === undefined ?
 
 test('review search keeps the language filter and sends no stars qualifier, which issue search does not support', () => {
   assert.equal(REVIEW_MIN_STARS, 25);
-  assert.equal(buildSearchQuery({ languages: ['Python'] }, 'reviews'), 'is:pr is:open review:none language:Python');
-  assert.equal(buildSearchQuery({}, 'reviews'), 'is:pr is:open review:none');
+  const now = new Date('2026-06-30T12:00:00Z');
+  assert.equal(buildSearchQuery({ languages: ['Python'] }, 'reviews', { now }), 'is:pr is:open review:none updated:>=2026-05-31 language:Python');
+  assert.equal(buildSearchQuery({}, 'reviews', { now }), 'is:pr is:open review:none updated:>=2026-05-31');
 });
 test('a review in a repository under 25 stars is flagged, not removed', () => {
   const m = scoreOpportunity(reviewPr(), {}, { stargazers_count: REVIEW_MIN_STARS - 1 });

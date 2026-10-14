@@ -271,7 +271,8 @@ test('review discovery sends the selected language and no stars qualifier', asyn
   const queries = [];
   const client = createGitHubClient({ fetchImpl: async url => { queries.push(queryOf(url)); return reply({ items: [] }); } });
   await client.discover({ mode: 'reviews', languages: ['Rust'] });
-  assert.deepEqual(queries, ['is:pr is:open review:none language:Rust']);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0], /^is:pr is:open review:none updated:>=\d{4}-\d{2}-\d{2} language:Rust$/);
 });
 
 test('stalled star lookups hit an overall deadline and discovery still returns every review', async () => {

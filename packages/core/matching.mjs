@@ -12,6 +12,8 @@ export const MAX_TOPIC_WORDS = 2;
  * GitHub's issue/PR search has no stars: qualifier (it is treated as free text), so this is enforced on repository metadata after the search.
  */
 export const REVIEW_MIN_STARS = 25;
+/** Pull requests with no activity inside this window are excluded from review discovery as likely abandoned. */
+export const REVIEW_WINDOW_DAYS = 30;
 
 const normalize = value => String(value ?? '').toLowerCase().trim();
 const words = value => normalize(value).split(/[,\s]+/).filter(Boolean).slice(0, 12);
@@ -230,7 +232,10 @@ export function buildSearchQuery(prefs, kind, { now = new Date(), topic } = {}) 
     return `is:issue is:open label:"good first issue","help wanted" updated:>=${since}${language}`;
   }
   // No stars: here; /search/issues does not support it and would treat it as text. See REVIEW_MIN_STARS.
-  if (kind === 'reviews') return `is:pr is:open review:none${language}`;
+  if (kind === 'reviews') {
+    const since = new Date(now.getTime() - REVIEW_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10);
+    return `is:pr is:open review:none updated:>=${since}${language}`;
+  }
   if (kind === 'repositories') {
     const chosen = topic === undefined ? extractTopics(p.interests, 1)[0] : extractTopics(topic, 1)[0];
     return `archived:false fork:false stars:>=10${language.replace('%2B', '+')}${chosen ? ` ${chosen}` : ''}`;
