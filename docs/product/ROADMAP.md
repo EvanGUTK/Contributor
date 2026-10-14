@@ -11,8 +11,8 @@ Prioritize verified usefulness over polishing an empty AI dashboard. Tasks are d
 - [x] Generate approval-first handoff prompts.
 - [x] Write seven-tool MCP v2 server source.
 - [x] Build local matching/GitHub API unit tests.
-- [ ] Install current MCP dependencies and perform Inspector protocol smoke test.
-- [ ] Validate actual public GitHub search responses and browser CORS/quota behavior in connected environment.
+- [x] Install current MCP dependencies and perform stdio protocol smoke test (initialize + tools/list; Inspector and real clients not yet used).
+- [ ] Validate actual public GitHub search responses and browser CORS/quota behavior in connected environment (Node-side search verified 2026-10-14; browser CORS/quota pending).
 - [ ] Verify real Claude/Codex/OpenCode/Hermes current-stable MCP registration and discovery.
 - [ ] Human UX trial with five users; document unmatched queries and accessibility issues.
 
