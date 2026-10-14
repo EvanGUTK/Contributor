@@ -9,7 +9,7 @@ Prioritize verified usefulness over polishing an empty AI dashboard. Tasks are d
 - [x] Build responsive static UI using public GitHub search.
 - [x] Implement explainable deterministic ranking and bounded read-only REST client.
 - [x] Generate approval-first handoff prompts.
-- [x] Write seven-tool MCP v2 server source.
+- [x] Write ten-tool MCP v2 server source.
 - [x] Build local matching/GitHub API unit tests.
 - [x] Install current MCP dependencies and perform stdio protocol smoke test (initialize + tools/list; Inspector and real clients not yet used).
 - [ ] Validate actual public GitHub search responses and browser CORS/quota behavior in connected environment (Node-side search verified 2026-10-14; browser CORS/quota pending).

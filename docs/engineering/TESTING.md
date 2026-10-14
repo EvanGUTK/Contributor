@@ -8,7 +8,7 @@ Run `npm run test` (Node built-in test runner). Fixtures check normalization, ex
 
 ## Next local gates
 
-1. **Node runtime:** install npm dependencies, run `node --check` on MCP and use MCP Inspector to invoke all seven tools.
+1. **Node runtime:** install npm dependencies, run `node --check` on MCP and use MCP Inspector to invoke all ten tools.
 2. **Web browser:** validate load, form, keyboard-only navigation, screen reader labels, error handling, fake network responses, responsive layout and clipboard API over HTTPS/localhost.
 3. **Live API:** probe search queries and quotas with real GitHub data; verify actual Repo/Issue/PR grouping, CORS, PR review filters and rate-limit displays.
 4. **MCP clients:** exercise latest stable Claude Code, Codex, OpenCode and Hermes; capture exact versions/OS and protocol negotiation logs without credentials.
