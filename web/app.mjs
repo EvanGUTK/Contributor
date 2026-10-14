@@ -74,6 +74,24 @@ function byokNote(item, p) {
   try { tokens = estimateTokens(buildHandoffPrompt(item, p)); } catch { return ''; }
   return `<p class="byok-note">Prompt ~${tokens.toLocaleString('en-US')} tokens est. · Your AI provider bills you directly · Contributor charges nothing</p>`;
 }
+// Read once per call so a mid-session OS setting change is honoured.
+const okToAnimate = () => !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const CARD_STAGGER_MS = 60;
+// Fade cards in one after another. Inline styles are cleared afterwards so the stylesheet's hover transitions apply again.
+function staggerCards() {
+  if (!okToAnimate()) return;
+  const cards = [...resultRoot.querySelectorAll('.result-card')];
+  cards.forEach(el => { el.style.opacity = '0'; el.style.transform = 'translateY(12px)'; el.style.transition = 'opacity 0.3s ease, transform 0.3s ease'; });
+  void resultRoot.offsetHeight; // commit the start state before transitioning
+  cards.forEach((el, i) => {
+    setTimeout(() => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; }, i * CARD_STAGGER_MS);
+    el.addEventListener('transitionend', function done(event) {
+      if (event.target !== el) return; // ignore transitions bubbling up from the card's buttons
+      el.removeEventListener('transitionend', done);
+      el.style.removeProperty('opacity'); el.style.removeProperty('transform'); el.style.removeProperty('transition');
+    });
+  });
+}
 const COPY_LABEL = 'Copy AI prompt <span>↗</span>';
 const COPIED_RESET_MS = 2000;
 function card(item, p, i, saved = false) {
@@ -136,7 +154,7 @@ function detailHtml(item) {
   const warning = match.safetyFlags?.outsideReviewWelcome === false
     ? `<div class="panel-warning" role="note"><strong>⚠ Outside reviews may not be welcome</strong>${escape(match.safetyFlags.disclaimer || 'Check CONTRIBUTING.md before commenting.')}</div>` : '';
   return `${header}
-    <div class="panel-kind"><span class="result-kind">${escape(kind)}</span><span class="match">${match.score} / 100</span></div>
+    <div class="panel-kind"><span class="result-kind">${escape(kind)}</span><span class="match"><span class="panel-score">${match.score}</span> / 100</span></div>
     <h3 class="panel-title" id="panel-title">${escape(item.title || item.full_name || 'Untitled')}</h3>
     ${stats ? `<p class="panel-stats">${stats}</p>` : ''}
     ${license || activity ? `<div class="panel-meta">${license}${activity}</div>` : ''}
@@ -146,9 +164,22 @@ function detailHtml(item) {
     ${warning}${notes.map(n => `<p class="panel-note">${escape(n)}</p>`).join('')}
     <div class="panel-actions"><a class="btn btn-primary" href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a><button type="button" class="btn btn-text" id="panel-copy">Copy AI prompt</button></div>`;
 }
+// Count a number up from 0 with an ease-out curve. The final value is already in the markup, so skipping is safe.
+function animateCount(el, target, duration = 600) {
+  if (!el || !Number.isFinite(target) || !okToAnimate()) return;
+  const start = performance.now();
+  function tick(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    el.textContent = Math.round(Math.pow(progress, 0.5) * target);
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+  el.textContent = '0';
+  requestAnimationFrame(tick);
+}
 function openPanel(item, p) {
   panelReturnFocus = document.activeElement;
   panelBody.innerHTML = detailHtml(item);
+  animateCount(panelBody.querySelector('.panel-score'), Number(item._match.score));
   panel.setAttribute('aria-labelledby', 'panel-title');
   panel.removeAttribute('aria-label');
   panelBackdrop.hidden = false;
@@ -166,7 +197,7 @@ function closePanel() {
   panel.classList.remove('open'); panelBackdrop.classList.remove('open');
   panel.setAttribute('aria-hidden', 'true');
   document.body.classList.remove('panel-open');
-  setTimeout(() => { if (!panel.classList.contains('open')) panelBackdrop.hidden = true; }, 200);
+  setTimeout(() => { if (!panel.classList.contains('open')) panelBackdrop.hidden = true; }, 250); // matches the backdrop fade in styles.css
   if (panelReturnFocus?.isConnected) panelReturnFocus.focus();
 }
 panelClose.addEventListener('click', closePanel);
@@ -198,6 +229,7 @@ let viewingSaved = false;
 function renderResults({ items, p }) {
   visibleItems = items; visiblePrefs = p;
   resultRoot.innerHTML = items.map((x, i) => card(x, p, i)).join('');
+  staggerCards();
   resultRoot.querySelectorAll('.copy-prompt').forEach(el => el.addEventListener('click', async () => {
     const index = Number(el.dataset.index);
     try {
@@ -219,6 +251,7 @@ function renderSaved() {
   if (!list.length) { resultRoot.innerHTML = '<div class="empty">Nothing saved yet. Use Save on a result to keep it on this device.</div>'; return; }
   visibleItems = list; visiblePrefs = null;
   resultRoot.innerHTML = list.map((x, i) => card(x, null, i, true)).join('');
+  staggerCards();
   resultRoot.querySelectorAll('.remove-saved').forEach(el => el.addEventListener('click', () => {
     const target = list[Number(el.dataset.index)];
     if (!writeSaved(readSaved().filter(x => x.html_url !== target.html_url))) status.textContent = 'Removing unavailable: this browser blocked local storage.';
@@ -276,6 +309,23 @@ form.addEventListener('submit', async event => {
       resultRoot.innerHTML = fallback;
     }
   } finally { btn.disabled = false; btn.innerHTML = 'Discover opportunities <span>→</span>'; }
+});
+
+// Ripple on primary buttons. Keyboard activation (detail 0) has no pointer position, so it starts from the centre.
+document.addEventListener('click', event => {
+  const target = event.target.closest('.btn-primary');
+  if (!target || !okToAnimate()) return;
+  const rect = target.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height);
+  const x = event.detail ? event.clientX - rect.left : rect.width / 2;
+  const y = event.detail ? event.clientY - rect.top : rect.height / 2;
+  let host = target.querySelector(':scope > .btn-ripple-host');
+  if (!host) { host = document.createElement('span'); host.className = 'btn-ripple-host'; host.setAttribute('aria-hidden', 'true'); target.appendChild(host); }
+  const ripple = document.createElement('span');
+  ripple.className = 'btn-ripple';
+  Object.assign(ripple.style, { width: `${size}px`, height: `${size}px`, left: `${x - size / 2}px`, top: `${y - size / 2}px` });
+  host.appendChild(ripple);
+  ripple.addEventListener('animationend', () => ripple.remove());
 });
 
 // Example chips pre-fill the filter fields and run the search immediately.

@@ -293,6 +293,27 @@ footer p { margin: 0; }
   footer { align-items: flex-start; flex-direction: column; justify-content: center; padding: 24px 0; }
 }
 
+/* Motion. Everything here is opt-in via no-preference, so reduced-motion users see the static page. */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero h1      { animation: fadeUp 0.5s ease both; animation-delay: 0.05s; }
+  .hero-sub     { animation: fadeUp 0.5s ease both; animation-delay: 0.15s; }
+  .hero-actions { animation: fadeUp 0.5s ease both; animation-delay: 0.25s; }
+  .hero-pills   { animation: fadeUp 0.5s ease both; animation-delay: 0.35s; }
+  /* Spring-like slide; visibility flips only after the slide-out finishes. */
+  .detail-panel { transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s linear 0.35s; }
+  .detail-panel.open { transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s; }
+  .panel-backdrop { transition: opacity 0.25s ease; }
+  /* Click ripple. The host clips it instead of the button, so the Copy AI prompt tooltip is not cut off. */
+  .btn-primary { position: relative; }
+  .btn-ripple-host { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+  .btn-ripple { position: absolute; border-radius: 50%; background: rgba(255, 255, 255, 0.2); transform: scale(0); animation: ripple 0.5s ease-out forwards; pointer-events: none; }
+}
+@keyframes ripple { to { transform: scale(4); opacity: 0; } }
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .btn, .result-card, .detail-panel, .panel-backdrop { transition: none; }
