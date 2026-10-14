@@ -6,6 +6,8 @@ const MAX_RETRIES = 2;
 const BASE_DELAY_MS = 1000;
 /** Linked-PR lookups run at most this many at a time per discover() call. */
 const MAX_PARALLEL_LOOKUPS = 5;
+/** Issues closed within this many days count toward maintainer close velocity. */
+const RECENT_CLOSE_WINDOW_DAYS = 30;
 const realSleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const isRateLimited = status => status === 403 || status === 429;
 
@@ -132,5 +134,29 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined, sleep
       throw error;
     }
   }
-  return { discover, search, getRepo, getRepoFiles, request };
+  /**
+   * Public-data estimate of maintainer activity: last push, open backlog, archived flag and how many of the
+   * 5 most recently updated closed issues (pull requests excluded) closed inside the recent window.
+   * Two cached, read-only requests; request() applies the 8 minute TTL.
+   */
+  async function getResponsivenessSignals(owner, name) {
+    for (const part of [owner, name]) if (!/^[\w.-]{1,100}$/.test(part)) throw new Error('Invalid GitHub repository identifier');
+    const [repo, closed] = await Promise.all([
+      getRepo(owner, name),
+      request(`/repos/${owner}/${name}/issues?state=closed&sort=updated&per_page=5`),
+    ]);
+    const now = Date.now();
+    const pushed = Date.parse(repo?.pushed_at || '');
+    const cutoff = now - RECENT_CLOSE_WINDOW_DAYS * 86400000;
+    const recentCloseCount = (Array.isArray(closed) ? closed : []).slice(0, 5)
+      .filter(issue => !issue.pull_request && Date.parse(issue.closed_at || '') >= cutoff).length;
+    return {
+      recentCloseCount,
+      // null means "unknown" (no push timestamp), never "recent".
+      daysSinceLastPush: Number.isFinite(pushed) ? Math.max(0, Math.floor((now - pushed) / 86400000)) : null,
+      openIssueCount: Number.isFinite(repo?.open_issues_count) ? repo.open_issues_count : null,
+      archived: Boolean(repo?.archived),
+    };
+  }
+  return { discover, search, getRepo, getRepoFiles, getResponsivenessSignals, request };
 }

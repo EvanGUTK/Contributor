@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty, calibrateExperience, EXPERIENCED_HOURS, QUICK_TASK_HOURS, IN_PROGRESS_PENALTY } from '../packages/core/matching.mjs';
+import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty, calibrateExperience, EXPERIENCED_HOURS, QUICK_TASK_HOURS, IN_PROGRESS_PENALTY, scoreResponsiveness, RESPONSIVENESS_NOTE } from '../packages/core/matching.mjs';
 import { createGitHubClient, GitHubApiError } from '../packages/github/client.mjs';
 const example = { title: 'Handle empty arrays in image processing', body: 'Python OpenCV processing', html_url: 'https://github.com/example/vision/issues/42', repository_url: 'https://api.github.com/repos/example/vision', labels: [{ name: 'good first issue' }], updated_at: new Date().toISOString() };
 test('normalization is bounded and rejects invalid modes', () => {
@@ -106,4 +106,71 @@ test('inProgress=false (or omitted) leaves the score and reasons unchanged', () 
 test('the in-progress penalty never takes a score below zero', () => {
   const stale = { title: 'x', repository_url: 'https://api.github.com/repos/a/b', updated_at: '2000-01-01T00:00:00Z' };
   assert.ok(scoreOpportunity(stale, { languages: ['Rust'] }, null, { inProgress: true }).score >= 0);
+});
+
+const sig = (over = {}) => ({ recentCloseCount: 0, daysSinceLastPush: 200, openIssueCount: 10, archived: false, ...over });
+
+test('scoreResponsiveness scores each push-recency band', () => {
+  const fresh = scoreResponsiveness(sig({ daysSinceLastPush: 30 }));
+  assert.equal(fresh.score, 8);
+  assert.match(fresh.label, /recently active/);
+  assert.equal(scoreResponsiveness(sig({ daysSinceLastPush: 31 })).score, 5);
+  assert.equal(scoreResponsiveness(sig({ daysSinceLastPush: 90 })).score, 5);
+  assert.equal(scoreResponsiveness(sig({ daysSinceLastPush: 91 })).score, 1);
+});
+
+test('scoreResponsiveness scores close velocity bands', () => {
+  const base = { daysSinceLastPush: 5 };
+  assert.equal(scoreResponsiveness(sig({ ...base, recentCloseCount: 0 })).score, 8);
+  assert.equal(scoreResponsiveness(sig({ ...base, recentCloseCount: 2 })).score, 10);
+  const busy = scoreResponsiveness(sig({ ...base, recentCloseCount: 3 }));
+  assert.equal(busy.score, 13);
+  assert.ok(busy.reasons.includes('maintainers closing issues'));
+});
+
+test('scoreResponsiveness penalizes a backlog above 500 and never goes below zero', () => {
+  const heavy = scoreResponsiveness(sig({ daysSinceLastPush: 5, openIssueCount: 501 }));
+  assert.equal(heavy.score, 5);
+  assert.ok(heavy.reasons.includes('high open issue backlog'));
+  assert.equal(scoreResponsiveness(sig({ daysSinceLastPush: 5, openIssueCount: 500 })).score, 8);
+  assert.equal(scoreResponsiveness(sig({ openIssueCount: 900 })).score, 0);
+});
+
+test('scoreResponsiveness reports archived repositories as zero regardless of other signals', () => {
+  const r = scoreResponsiveness(sig({ archived: true, daysSinceLastPush: 1, recentCloseCount: 5 }));
+  assert.equal(r.score, 0);
+  assert.equal(r.label, 'archived');
+});
+
+test('scoreResponsiveness stays within 0-15, always states its uncertainty and treats missing data as unknown', () => {
+  const best = scoreResponsiveness(sig({ daysSinceLastPush: 0, recentCloseCount: 5 }));
+  assert.ok(best.score <= 15);
+  assert.equal(best.note, 'Responsiveness is estimated from public data only.');
+  assert.equal(RESPONSIVENESS_NOTE, best.note);
+  const unknown = scoreResponsiveness({ daysSinceLastPush: null, recentCloseCount: null, openIssueCount: null, archived: false });
+  assert.equal(unknown.score, 0);
+  assert.equal(unknown.label, 'activity unknown');
+  assert.equal(scoreResponsiveness(sig({ archived: true })).note, RESPONSIVENESS_NOTE);
+});
+
+test('scoreOpportunity uses responsiveness signals for the maintainership breakdown when supplied', () => {
+  const repo = { language: 'Python', archived: false, full_name: 'example/vision' };
+  const signals = sig({ daysSinceLastPush: 3, recentCloseCount: 4 });
+  const m = scoreOpportunity(example, { languages: ['Python'] }, repo, { signals });
+  assert.equal(m.breakdown.maintainership, 13);
+  assert.equal(m.maintainership.label, 'recently active');
+  assert.ok(m.reasons.some(r => /closing issues/.test(r)));
+});
+
+test('scoreOpportunity keeps the flat maintainership score and no responsiveness result without signals', () => {
+  const m = scoreOpportunity(example, { languages: ['Python'] }, { language: 'Python', archived: false });
+  assert.equal(m.breakdown.maintainership, 7);
+  assert.equal(m.maintainership, null);
+});
+
+test('scoreOpportunity scores an archived repo zero even when signals look healthy', () => {
+  const m = scoreOpportunity(example, {}, { archived: true }, { signals: sig({ daysSinceLastPush: 1, recentCloseCount: 5 }) });
+  assert.equal(m.breakdown.maintainership, 0);
+  assert.equal(m.maintainership.label, 'archived');
+  assert.ok(m.reasons.some(r => /Archived repository/.test(r)));
 });

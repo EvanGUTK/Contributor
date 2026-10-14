@@ -55,7 +55,33 @@ export function calibrateExperience(p) {
 /** Score points removed from an issue that already has a linked open PR: still shown, but ranked lower. */
 export const IN_PROGRESS_PENALTY = 15;
 
-export function scoreOpportunity(item, preferences = {}, repo = null, { inProgress = false } = {}) {
+/** Always attached to a responsiveness result so callers never present the estimate as certain. */
+export const RESPONSIVENESS_NOTE = 'Responsiveness is estimated from public data only.';
+
+/**
+ * Pure 0-15 estimate of maintainer responsiveness from getResponsivenessSignals() output.
+ * Missing numbers are treated as unknown and earn no points rather than being guessed.
+ */
+export function scoreResponsiveness(signals = {}) {
+  const { daysSinceLastPush, recentCloseCount, openIssueCount, archived } = signals ?? {};
+  if (archived) return { score: 0, label: 'archived', reasons: ['Archived repository: maintainers are not accepting changes'], note: RESPONSIVENESS_NOTE };
+  const reasons = [];
+  let score = 0;
+  let label = 'activity unknown';
+  if (Number.isFinite(daysSinceLastPush)) {
+    if (daysSinceLastPush <= 30) { score += 8; label = 'recently active'; reasons.push('recently active (pushed within 30 days)'); }
+    else if (daysSinceLastPush <= 90) { score += 5; label = 'somewhat active'; reasons.push('last push 31-90 days ago'); }
+    else { score += 1; label = 'inactive'; reasons.push('no push in over 90 days'); }
+  }
+  if (Number.isFinite(recentCloseCount)) {
+    if (recentCloseCount >= 3) { score += 5; reasons.push('maintainers closing issues'); }
+    else if (recentCloseCount >= 1) score += 2;
+  }
+  if (Number.isFinite(openIssueCount) && openIssueCount > 500) { score -= 3; reasons.push('high open issue backlog'); }
+  return { score: clamp(score, 0, 15), label, reasons, note: RESPONSIVENESS_NOTE };
+}
+
+export function scoreOpportunity(item, preferences = {}, repo = null, { inProgress = false, signals = null } = {}) {
   const p = normalizePreferences(preferences);
   const { effectiveLevel, interestOnly, quickTask } = calibrateExperience(p);
   const name = item.name || item.title || '';
@@ -113,12 +139,15 @@ export function scoreOpportunity(item, preferences = {}, repo = null, { inProgre
   const days = Number.isFinite(updated) ? Math.max(0, (Date.now() - updated) / 86400000) : Infinity;
   breakdown.freshness = days <= 7 ? 12 : days <= 30 ? 9 : days <= 90 ? 5 : 1;
   if (days <= 30) reasons.push('Recent repository activity');
-  breakdown.maintainership = repo?.archived || repo?.disabled ? 0 : 7;
+  // Without signals keep the original flat 7; with them, the 0-15 responsiveness estimate replaces it.
+  const maintainership = signals ? scoreResponsiveness({ ...signals, archived: signals.archived || repo?.archived }) : null;
+  breakdown.maintainership = repo?.disabled ? 0 : maintainership ? maintainership.score : repo?.archived ? 0 : 7;
   if (repo?.archived) reasons.push('Archived repository: confirm contribution policy');
+  else if (maintainership) reasons.push(...maintainership.reasons.filter(r => /recently active|closing issues|backlog/.test(r)).map(r => `Maintainers: ${r}`));
   const base = Math.min(100, Object.values(breakdown).reduce((a, b) => a + b, 0));
   const score = inProgress ? Math.max(0, base - IN_PROGRESS_PENALTY) : base;
   if (inProgress) reasons.push('A linked open pull request may already address this issue');
-  return { score, inProgress, breakdown, reasons, difficulty, confidence: repo ? 'medium' : 'limited',
+  return { score, inProgress, maintainership, breakdown, reasons, difficulty, confidence: repo ? 'medium' : 'limited',
     calibration: { interestOnly, quickTask },
     note: 'Heuristic relevance score, not a prediction of acceptance or skill.' };
 }
