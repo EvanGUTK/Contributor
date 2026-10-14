@@ -230,6 +230,13 @@ test('review and repository results trigger no linked PR lookups', async () => {
   assert.equal(queries.length, 1);
 });
 
+test('review discovery sends the raised star threshold and the selected language', async () => {
+  const queries = [];
+  const client = createGitHubClient({ fetchImpl: async url => { queries.push(queryOf(url)); return reply({ items: [] }); } });
+  await client.discover({ mode: 'reviews', languages: ['Rust'] });
+  assert.deepEqual(queries, ['is:pr is:open review:none stars:>=25 language:Rust']);
+});
+
 const DAY = 86400000;
 const daysAgo = n => new Date(Date.now() - n * DAY).toISOString();
 const responsivenessFetch = ({ repoBody, closed, calls = [] }) => async url => {

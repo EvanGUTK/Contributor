@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty, calibrateExperience, EXPERIENCED_HOURS, QUICK_TASK_HOURS, IN_PROGRESS_PENALTY, scoreResponsiveness, RESPONSIVENESS_NOTE } from '../packages/core/matching.mjs';
+import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty, calibrateExperience, EXPERIENCED_HOURS, QUICK_TASK_HOURS, IN_PROGRESS_PENALTY, scoreResponsiveness, RESPONSIVENESS_NOTE, OUTSIDE_REVIEW_DISCLAIMER, REVIEW_MIN_STARS, isMostlyNonEnglish } from '../packages/core/matching.mjs';
 import { createGitHubClient, GitHubApiError } from '../packages/github/client.mjs';
 const example = { title: 'Handle empty arrays in image processing', body: 'Python OpenCV processing', html_url: 'https://github.com/example/vision/issues/42', repository_url: 'https://api.github.com/repos/example/vision', labels: [{ name: 'good first issue' }], updated_at: new Date().toISOString() };
 test('normalization is bounded and rejects invalid modes', () => {
@@ -173,4 +173,41 @@ test('scoreOpportunity scores an archived repo zero even when signals look healt
   assert.equal(m.breakdown.maintainership, 0);
   assert.equal(m.maintainership.label, 'archived');
   assert.ok(m.reasons.some(r => /Archived repository/.test(r)));
+});
+
+const reviewPr = (overrides = {}) => ({ pull_request: {}, title: 'Fix parser edge case', body: 'Handles empty input in the tokenizer.', html_url: 'https://github.com/example/parser/pull/7', repository_url: 'https://api.github.com/repos/example/parser', updated_at: new Date().toISOString(), ...overrides });
+const safety = (item, stars) => scoreOpportunity(item, {}, stars === undefined ? null : { stargazers_count: stars, full_name: 'example/parser' }).safetyFlags;
+
+test('review search requires at least 25 stars and keeps the language filter', () => {
+  assert.equal(REVIEW_MIN_STARS, 25);
+  assert.equal(buildSearchQuery({ languages: ['Python'] }, 'reviews'), 'is:pr is:open review:none stars:>=25 language:Python');
+  assert.equal(buildSearchQuery({}, 'reviews'), 'is:pr is:open review:none stars:>=25');
+});
+test('a review in a repository under 25 stars is flagged, not removed', () => {
+  const m = scoreOpportunity(reviewPr(), {}, { stargazers_count: REVIEW_MIN_STARS - 1 });
+  assert.equal(m.safetyFlags.outsideReviewWelcome, false);
+  assert.equal(m.safetyFlags.disclaimer, OUTSIDE_REVIEW_DISCLAIMER);
+  assert.match(m.safetyFlags.disclaimer, /Check CONTRIBUTING\.md before commenting/);
+  assert.ok(m.score > 0);
+});
+test('a mostly non-ASCII review description is flagged even for a popular repository', () => {
+  const flags = safety(reviewPr({ title: '修正', body: '金融システムの決済処理のバグを修正しました。レビューをお願いします。' }), 5000);
+  assert.equal(flags.outsideReviewWelcome, false);
+  assert.equal(flags.disclaimer, OUTSIDE_REVIEW_DISCLAIMER);
+});
+test('a clean review in an established repository is welcome with no disclaimer', () => {
+  assert.deepEqual(safety(reviewPr(), REVIEW_MIN_STARS), { outsideReviewWelcome: true, disclaimer: null });
+});
+test('an unknown star count is not treated as low', () => {
+  assert.equal(safety(reviewPr(), undefined).outsideReviewWelcome, true);
+});
+test('non-English detection ignores empty text, emoji and a few accented letters', () => {
+  assert.equal(isMostlyNonEnglish(''), false);
+  assert.equal(isMostlyNonEnglish('🎉🎉'), false);
+  assert.equal(isMostlyNonEnglish('Add café menu support to the parser'), false);
+  assert.equal(isMostlyNonEnglish('Исправить ошибку в разборе'), true);
+});
+test('only review opportunities carry the outside-review warning', () => {
+  const m = scoreOpportunity(example, {}, { stargazers_count: 1 });
+  assert.deepEqual(m.safetyFlags, { outsideReviewWelcome: true, disclaimer: null });
 });
