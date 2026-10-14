@@ -3,52 +3,39 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#071516" />
+  <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Contributor finds meaningful open-source repositories, beginner-friendly issues and pull requests worth reviewing — free, open source and AI-provider independent." />
   <title>Contributor — Find your place in open source.</title>
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="./styles.css" />
-  <style>
-    .saved-bar{display:flex;gap:18px;align-items:center;margin:0 0 16px}
-    .saved-bar button{border:1px solid #315747;border-radius:100px;background:#0d1b1b;color:#aaf5c9;font-size:12px;padding:9px 15px;cursor:pointer}
-    .saved-bar button:hover{border-color:#63d7a2}
-    .saved-bar button[hidden]{display:none}
-    #clear-saved{color:#f0a5a5;border-color:#6b3a3a}
-    .remove-saved{color:#f0a5a5;font-size:11px;background:none;border:0;cursor:pointer;padding:0}
-    .remove-saved:hover{text-decoration:underline}
-    .save-toggle{color:#a5eabf;font-size:11px;background:none;border:0;cursor:pointer;padding:0}
-    .save-toggle:hover{text-decoration:underline}
-    .save-toggle[aria-pressed="true"]{color:#88edb2;font-weight:700}
-  </style>
 </head>
 <body>
-  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
   <div class="shell">
     <header class="topbar">
-      <a href="#" class="brand" aria-label="Contributor home"><span class="brandmark">&lt;/&gt;</span> contributor<span class="branddot">.</span></a>
+      <a href="#" class="brand" aria-label="Contributor home"><span class="brandmark" aria-hidden="true">C</span> contributor<span class="branddot">.</span></a>
       <nav aria-label="Main navigation" class="nav"><a href="#discover">Discover</a><a href="#how">How it works</a><a href="https://github.com/EvanGUTK/contributor" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav>
-      <span class="top-status"><span></span> COMMUNITY-FIRST · OPEN SOURCE</span>
+      <span class="top-status">Community-first · Open source</span>
     </header>
 
     <main>
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow"><span class="eyebrow-line"></span> THE OPEN SOURCE OPPORTUNITY ENGINE</p>
+          <p class="eyebrow">The open source opportunity engine</p>
           <h1>Good code deserves<br /><em>good contributors.</em></h1>
           <p class="hero-sub">Stop digging through thousands of GitHub issues. Tell us what you know and what excites you. We'll find meaningful repositories, issues, and pull requests worth your time.</p>
           <div class="hero-actions"><a class="btn btn-primary" href="#discover">Find my next contribution <span>↗</span></a><a class="btn btn-text" href="#how">See how it works <span>↓</span></a></div>
           <div class="hero-meta"><span><strong>$0</strong> platform subscription</span><i></i><span><strong>BYOK</strong> AI optional</span><i></i><span><strong>GitHub</strong> public data</span></div>
         </div>
-        <div class="hero-visual" aria-label="Illustration of connected source repositories">
-          <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
-          <div class="code-surface"><span class="pill-text">// discover your next contribution</span><div class="code-row"><span class="code-keyword">const</span> opportunity = <span class="code-fn">await</span> contributor.<span class="code-fn">discover</span>({</div><div class="code-row indent">skills: <span class="code-string">['python', 'ai']</span>,</div><div class="code-row indent">interest: <span class="code-string">'computer vision'</span>,</div><div class="code-row indent">time: <span class="code-number">4</span>,</div><div class="code-row">});</div><div class="code-result"><span class="green-dot"></span> Matching with open source…</div></div>
-          <div class="mini-card mini-one"><span class="mini-symbol">◇</span><div><b>Meaningful matches</b><small>Beyond good first issues</small></div></div>
-          <div class="mini-card mini-two"><span class="mini-symbol">⌘</span><div><b>Your AI, your choice</b><small>Claude · Codex · Hermes</small></div></div>
+        <div class="hero-visual" role="img" aria-label="Illustration: repositories, issues and reviews matched to a contributor">
+          <div class="hero-blob blob-one"></div><div class="hero-blob blob-two"></div>
+          <div class="mini-card mini-one"><span class="mini-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v15H6a2 2 0 0 0-2 2z"/><path d="M4 20a2 2 0 0 1 2-2h12v3H6a2 2 0 0 1-2-1z"/></svg></span><div><b>Meaningful repositories</b><small>Beyond good first issues</small></div></div>
+          <div class="mini-card mini-two"><span class="mini-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5"/><path d="M12 16h.01"/></svg></span><div><b>Issues that fit you</b><small>Ranked with clear reasons</small></div></div>
+          <div class="mini-card mini-three"><span class="mini-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7"/><path d="M18 11.5c0 4-6 3-12 4.5"/></svg></span><div><b>Your AI, your choice</b><small>Claude · Codex · Hermes</small></div></div>
         </div>
       </section>
 
       <section class="finder" id="discover" aria-labelledby="finder-title">
-        <div class="section-head"><div><p class="eyebrow small">01 / DISCOVER</p><h2 id="finder-title">Your next contribution starts here.</h2><p>Rank real, current public GitHub results against your interests. No account required.</p></div><span class="read-only"><span>●</span> READ-ONLY BY DESIGN</span></div>
+        <div class="section-head"><div><p class="eyebrow">01 / DISCOVER</p><h2 id="finder-title">Your next contribution starts here.</h2><p>Rank real, current public GitHub results against your interests. No account required.</p></div><span class="read-only">Read-only by design</span></div>
         <form id="search-form" class="filter-panel">
           <div class="field"><label for="languages">YOUR LANGUAGES</label><input id="languages" name="languages" placeholder="Python, TypeScript, Rust…" value="Python" maxlength="160" /></div>
           <div class="field field-wide"><label for="interests">WHAT INTERESTS YOU?</label><input id="interests" name="interests" placeholder="AI, robotics, quantum computing, developer tools…" value="AI computer vision" maxlength="120" /></div>
@@ -62,8 +49,8 @@
         <section id="results" class="results" aria-label="Discovery results"></section>
       </section>
 
-      <section id="how" class="how" aria-labelledby="how-title"><div class="section-head"><div><p class="eyebrow small">02 / THE WORKFLOW</p><h2 id="how-title">From curious to contributor.</h2></div></div><div class="steps"><article><span>01</span><h3>Tell us your interests</h3><p>Pick skills, topics, time and the kind of contribution you enjoy.</p></article><article><span>02</span><h3>We discover the work</h3><p>GitHub's real repository and PR data, ranked with explanations rather than opaque AI scores.</p></article><article><span>03</span><h3>Choose a path</h3><p>Follow a repo, investigate an issue or practice evidence-based code review.</p></article><article><span>04</span><h3>Bring your assistant</h3><p>Copy a ready-to-use, approval-first prompt into Claude, Codex, OpenCode or Hermes.</p></article></div></section>
-      <section class="bottom-cta"><div><p class="eyebrow small">BUILT TO GIVE BACK</p><h2>Open source should be easier to enter.</h2><p>No paywall for discovery. No surprise AI bills. No automated spam comments.</p></div><a href="#discover" class="btn btn-primary">Explore GitHub work ↗</a></section>
+      <section id="how" class="how" aria-labelledby="how-title"><div class="section-head"><div><p class="eyebrow">02 / THE WORKFLOW</p><h2 id="how-title">From curious to contributor.</h2></div></div><div class="steps"><article><span>01</span><h3>Tell us your interests</h3><p>Pick skills, topics, time and the kind of contribution you enjoy.</p></article><article><span>02</span><h3>We discover the work</h3><p>GitHub's real repository and PR data, ranked with explanations rather than opaque AI scores.</p></article><article><span>03</span><h3>Choose a path</h3><p>Follow a repo, investigate an issue or practice evidence-based code review.</p></article><article><span>04</span><h3>Bring your assistant</h3><p>Copy a ready-to-use, approval-first prompt into Claude, Codex, OpenCode or Hermes.</p></article></div></section>
+      <section class="bottom-cta"><div><p class="eyebrow">BUILT TO GIVE BACK</p><h2>Open source should be easier to enter.</h2><p>No paywall for discovery. No surprise AI bills. No automated spam comments.</p></div><a href="#discover" class="btn btn-primary">Explore GitHub work ↗</a></section>
     </main>
     <footer><span class="footer-name">contributor<span>.</span></span><p>Open source · BYOK-first · User-approved publishing</p><span>Built for the next generation of contributors.</span></footer>
   </div>
