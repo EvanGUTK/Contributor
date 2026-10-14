@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Find your next open-source contribution. Early scaffold: shows a Contributor badge on GitHub issue pages.",
   "permissions": ["activeTab"],
+  "host_permissions": ["https://api.github.com/*"],
   "action": {
     "default_title": "Contributor",
     "default_popup": "popup.html"
