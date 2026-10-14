@@ -37,8 +37,24 @@ export function estimateIssueDifficulty(issue) {
   return 'unknown';
 }
 
+/** A declared beginner who can commit this many hours is treated as intermediate, not interest-only. */
+export const EXPERIENCED_HOURS = 16;
+/** An advanced user with at most this many hours is looking for a quick task, not a deep one. */
+export const QUICK_TASK_HOURS = 2;
+
+/** Separate stated interest from demonstrated expertise using the declared level and time budget. */
+export function calibrateExperience(p) {
+  const promoted = p.level === 'beginner' && p.hours >= EXPERIENCED_HOURS;
+  return {
+    effectiveLevel: promoted ? 'intermediate' : p.level,
+    interestOnly: p.level === 'beginner' && !promoted,
+    quickTask: p.level === 'advanced' && p.hours <= QUICK_TASK_HOURS,
+  };
+}
+
 export function scoreOpportunity(item, preferences = {}, repo = null) {
   const p = normalizePreferences(preferences);
+  const { effectiveLevel, interestOnly, quickTask } = calibrateExperience(p);
   const name = item.name || item.title || '';
   const description = item.description || item.body || '';
   const language = normalize(repo?.language || item.language);
@@ -63,12 +79,24 @@ export function scoreOpportunity(item, preferences = {}, repo = null) {
   if (hits.length) reasons.push(`Relevant topics: ${hits.slice(0, 3).join(', ')}`);
   const difficulty = item.pull_request ? 'review' : item.repository_url ? estimateIssueDifficulty(item) : 'repository';
   const labels = (item.labels || []).map(x => normalize(typeof x === 'string' ? x : x.name));
-  if (difficulty === 'beginner' && p.level === 'beginner') {
+  if (difficulty === 'beginner' && quickTask) {
+    breakdown.accessibility = 18;
+    reasons.push('Small, well-scoped task that fits a short time budget');
+  } else if (difficulty === 'advanced' && quickTask) {
+    breakdown.accessibility = 3;
+    reasons.push('Likely too large for a short time budget');
+  } else if (difficulty === 'beginner' && interestOnly) {
     breakdown.accessibility = 20;
     reasons.push('Labeled beginner-friendly');
-  } else if (difficulty === 'advanced' && p.level === 'beginner') {
+  } else if (difficulty === 'beginner' && effectiveLevel === 'intermediate') {
+    breakdown.accessibility = 14;
+    reasons.push('Labeled beginner-friendly; your time budget suggests you can take on more');
+  } else if (difficulty === 'advanced' && interestOnly) {
     breakdown.accessibility = 1;
     reasons.push('May require advanced experience');
+  } else if (difficulty === 'advanced' && effectiveLevel === 'intermediate') {
+    breakdown.accessibility = 8;
+    reasons.push('May require advanced experience; a stretch given your time budget');
   } else if (difficulty === 'review') {
     breakdown.accessibility = p.mode === 'reviews' ? 15 : 9;
     reasons.push('Opportunity to practice code review');
@@ -86,6 +114,7 @@ export function scoreOpportunity(item, preferences = {}, repo = null) {
   if (repo?.archived) reasons.push('Archived repository: confirm contribution policy');
   const score = Math.min(100, Object.values(breakdown).reduce((a, b) => a + b, 0));
   return { score, breakdown, reasons, difficulty, confidence: repo ? 'medium' : 'limited',
+    calibration: { interestOnly, quickTask },
     note: 'Heuristic relevance score, not a prediction of acceptance or skill.' };
 }
 

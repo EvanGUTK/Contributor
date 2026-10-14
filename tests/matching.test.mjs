@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty } from '../packages/core/matching.mjs';
+import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty, calibrateExperience, EXPERIENCED_HOURS, QUICK_TASK_HOURS } from '../packages/core/matching.mjs';
 import { createGitHubClient, GitHubApiError } from '../packages/github/client.mjs';
 const example = { title: 'Handle empty arrays in image processing', body: 'Python OpenCV processing', html_url: 'https://github.com/example/vision/issues/42', repository_url: 'https://api.github.com/repos/example/vision', labels: [{ name: 'good first issue' }], updated_at: new Date().toISOString() };
 test('normalization is bounded and rejects invalid modes', () => {
@@ -49,4 +49,35 @@ test('repository query uses the first topic by default and an explicit topic whe
   assert.match(buildSearchQuery(prefs, 'repositories'), / image$/);
   assert.match(buildSearchQuery(prefs, 'repositories', { topic: 'processing' }), / processing$/);
   assert.doesNotMatch(buildSearchQuery(prefs, 'repositories', { topic: 'user:admin' }), /user:admin/);
+});
+const advancedIssue = { ...example, title: 'Rework architecture of the scheduler', labels: [{ name: 'architecture' }] };
+const repo = { language: 'Python', archived: false, full_name: 'example/vision' };
+const score = (item, prefs) => scoreOpportunity(item, { languages: ['Python'], ...prefs }, repo);
+test('calibration flags a short-budget beginner as interest-only', () => {
+  assert.deepEqual(score(example, { level: 'beginner', hours: 4 }).calibration, { interestOnly: true, quickTask: false });
+});
+test('a beginner with a 16h+ budget is treated as more experienced', () => {
+  assert.equal(EXPERIENCED_HOURS, 16);
+  assert.equal(calibrateExperience(normalizePreferences({ level: 'beginner', hours: 15 })).effectiveLevel, 'beginner');
+  assert.equal(calibrateExperience(normalizePreferences({ level: 'beginner', hours: 16 })).effectiveLevel, 'intermediate');
+  assert.deepEqual(score(example, { level: 'beginner', hours: 16 }).calibration, { interestOnly: false, quickTask: false });
+});
+test('experienced beginners are steered toward harder work than interest-only beginners', () => {
+  const novice = score(example, { level: 'beginner', hours: 4 }).breakdown.accessibility;
+  const seasoned = score(example, { level: 'beginner', hours: 16 }).breakdown.accessibility;
+  assert.ok(seasoned < novice);
+  assert.ok(score(advancedIssue, { level: 'beginner', hours: 16 }).breakdown.accessibility > score(advancedIssue, { level: 'beginner', hours: 4 }).breakdown.accessibility);
+});
+test('an advanced user with a 2h budget is flagged as quick-task and sent away from large work', () => {
+  assert.equal(QUICK_TASK_HOURS, 2);
+  const quick = score(example, { level: 'advanced', hours: 2 });
+  assert.deepEqual(quick.calibration, { interestOnly: false, quickTask: true });
+  assert.ok(quick.reasons.some(x => /short time budget/.test(x)));
+  assert.equal(score(example, { level: 'advanced', hours: 3 }).calibration.quickTask, false);
+  assert.ok(score(advancedIssue, { level: 'advanced', hours: 2 }).breakdown.accessibility < score(advancedIssue, { level: 'advanced', hours: 8 }).breakdown.accessibility);
+});
+test('calibration leaves intermediate users and the existing beginner path unchanged', () => {
+  assert.deepEqual(score(example, { level: 'intermediate', hours: 1 }).calibration, { interestOnly: false, quickTask: false });
+  assert.equal(score(example, { level: 'beginner', hours: 4 }).breakdown.accessibility, 20);
+  assert.equal(score(advancedIssue, { level: 'beginner', hours: 4 }).breakdown.accessibility, 1);
 });
