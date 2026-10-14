@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, projectIdFromIssue, estimateIssueDifficulty } from '../packages/core/matching.mjs';
+import { normalizePreferences, scoreOpportunity, buildHandoffPrompt, buildSearchQuery, extractTopics, ACTIVITY_WINDOW_DAYS, projectIdFromIssue, estimateIssueDifficulty } from '../packages/core/matching.mjs';
 import { createGitHubClient, GitHubApiError } from '../packages/github/client.mjs';
 const example = { title: 'Handle empty arrays in image processing', body: 'Python OpenCV processing', html_url: 'https://github.com/example/vision/issues/42', repository_url: 'https://api.github.com/repos/example/vision', labels: [{ name: 'good first issue' }], updated_at: new Date().toISOString() };
 test('normalization is bounded and rejects invalid modes', () => {
@@ -30,4 +30,23 @@ test('GitHub client builds read-only search request', async () => {
 test('rate-limit reports error instead of inventing results', async () => {
   const client = createGitHubClient({ fetchImpl: async () => ({ ok: false, status: 403, headers: { get: () => null } }) });
   await assert.rejects(() => client.discover({ mode: 'issues' }), GitHubApiError);
+});
+test('issue search matches good first issue or help wanted within the activity window', () => {
+  const q = buildSearchQuery({ languages: ['Python'] }, 'issues', { now: new Date('2026-10-14T12:00:00Z') });
+  assert.equal(ACTIVITY_WINDOW_DAYS, 90);
+  assert.match(q, /label:"good first issue","help wanted"/);
+  assert.match(q, /updated:>=2026-07-16(?: |$)/);
+  assert.match(q, /language:Python/);
+});
+test('topic extraction keeps at most two operator-safe words in order', () => {
+  assert.deepEqual(extractTopics('image processing machine-learning'), ['image', 'processing']);
+  assert.deepEqual(extractTopics('is:closed user:admin vision vision'), ['vision']);
+  assert.deepEqual(extractTopics('ab x'), []);
+  assert.deepEqual(extractTopics('graphics audio video', 3), ['graphics', 'audio', 'video']);
+});
+test('repository query uses the first topic by default and an explicit topic when given', () => {
+  const prefs = { interests: 'image processing', languages: ['Python'] };
+  assert.match(buildSearchQuery(prefs, 'repositories'), / image$/);
+  assert.match(buildSearchQuery(prefs, 'repositories', { topic: 'processing' }), / processing$/);
+  assert.doesNotMatch(buildSearchQuery(prefs, 'repositories', { topic: 'user:admin' }), /user:admin/);
 });
