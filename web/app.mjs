@@ -40,6 +40,13 @@ function toggleSaved(item) {
   const next = list.some(x => x.html_url === item.html_url) ? list.filter(x => x.html_url !== item.html_url) : [snapshot(item), ...list];
   return writeSaved(next) ? next.some(x => x.html_url === item.html_url) : null;
 }
+// Rough hint only: ~4 characters per token. Computed locally; no tokenizer or network call.
+function estimateTokens(text) { return Math.ceil(text.length / 4); }
+function byokNote(item, p) {
+  let tokens;
+  try { tokens = estimateTokens(buildHandoffPrompt(item, p)); } catch { return ''; }
+  return `<p class="byok-note">Prompt ~${tokens.toLocaleString('en-US')} tokens est. · Your AI provider bills you directly · Contributor charges nothing</p>`;
+}
 function card(item, p, i, saved = false) {
   const kind = describeOpportunity(item);
   const match = item._match;
@@ -47,7 +54,7 @@ function card(item, p, i, saved = false) {
   const href = /^https:\/\/github\.com\//.test(item.html_url) ? item.html_url : '#';
   const reasons = match.reasons.slice(0, 3).map(r => `<li>${escape(r)}</li>`).join('') || '<li>Matches the selected GitHub search criteria</li>';
   const summary = (item.description || item.body || '').replace(/\s+/g, ' ').slice(0, 235);
-  return `<article class="result-card"><div class="result-top"><span class="result-kind">${escape(kind)}</span><span class="match"><b>${match.score}</b><small> / 100 relevance</small></span></div><h3>${escape(item.title || item.full_name || 'Untitled')}</h3><p class="repo-name">${escape(repo)}</p><p class="result-desc">${escape(summary || 'Open on GitHub to inspect details and contribution requirements.')}</p><ul class="reasons">${reasons}</ul><div class="result-bottom"><a href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>${saved ? `<button type="button" class="remove-saved" data-index="${i}" aria-label="Remove ${escape(item.title || item.full_name || 'opportunity')} from saved">Remove</button>` : `<button type="button" class="save-toggle" data-index="${i}" aria-pressed="${isSaved(item)}">${isSaved(item) ? 'Saved ✓' : 'Save'}</button><button type="button" class="copy-prompt" data-index="${i}">Copy AI prompt <span>↗</span></button>`}</div></article>`;
+  return `<article class="result-card"><div class="result-top"><span class="result-kind">${escape(kind)}</span><span class="match"><b>${match.score}</b><small> / 100 relevance</small></span></div><h3>${escape(item.title || item.full_name || 'Untitled')}</h3><p class="repo-name">${escape(repo)}</p><p class="result-desc">${escape(summary || 'Open on GitHub to inspect details and contribution requirements.')}</p><ul class="reasons">${reasons}</ul><div class="result-bottom"><a href="${escape(href)}" target="_blank" rel="noopener noreferrer">View on GitHub ↗</a>${saved ? `<button type="button" class="remove-saved" data-index="${i}" aria-label="Remove ${escape(item.title || item.full_name || 'opportunity')} from saved">Remove</button>` : `<button type="button" class="save-toggle" data-index="${i}" aria-pressed="${isSaved(item)}">${isSaved(item) ? 'Saved ✓' : 'Save'}</button><button type="button" class="copy-prompt" data-index="${i}">Copy AI prompt <span>↗</span></button>`}</div>${saved ? '' : byokNote(item, p)}</article>`;
 }
 let lastResults = null;
 let viewingSaved = false;
