@@ -16,21 +16,28 @@ const isRateLimited = status => status === 403 || status === 429;
 export class GitHubApiError extends Error {
   constructor(message, status, reset = null, retries = 0) { super(message); this.name = 'GitHubApiError'; this.status = status; this.reset = reset; this.retries = retries; }
 }
-export function createGitHubClient({ fetchImpl = fetch, token = undefined, sleepFn = realSleep, onStatus = undefined, reviewLookupDeadlineMs = REVIEW_LOOKUP_DEADLINE_MS } = {}) {
+/**
+ * With `proxyBase` set, every call goes to `${proxyBase}?path=<endpoint>` with the browser's session cookie instead of
+ * straight to api.github.com; the Worker adds the signed-in user's token, so no token is ever handled here.
+ */
+export function createGitHubClient({ fetchImpl = fetch, token = undefined, proxyBase = undefined, sleepFn = realSleep, onStatus = undefined, reviewLookupDeadlineMs = REVIEW_LOOKUP_DEADLINE_MS } = {}) {
   const cache = new Map();
   async function request(endpoint, { ttlMs = 8 * 60_000 } = {}) {
     if (!endpoint.startsWith('/')) throw new Error('Only relative GitHub REST API paths are allowed');
     const existing = cache.get(endpoint);
     if (existing && Date.now() - existing.when < ttlMs) return existing.data;
-    const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    // Through the proxy the Worker sets the API version and Authorization itself, so neither is sent from the browser.
+    const headers = { Accept: 'application/vnd.github+json' };
+    if (!proxyBase) headers['X-GitHub-Api-Version'] = '2022-11-28';
+    if (token && !proxyBase) headers.Authorization = `Bearer ${token}`;
     // Stale entries are revalidated; GitHub answers 304 without counting against the rate limit.
     if (existing?.etag) headers['If-None-Match'] = existing.etag;
     let response;
     let retry = 0;
     // Exponential backoff (1s, 2s) on 403/429 before surfacing the rate-limit error.
     for (;; retry += 1) {
-      response = await fetchImpl(API + endpoint, { headers, signal: AbortSignal.timeout(12000) });
+      const target = proxyBase ? `${proxyBase}?path=${encodeURIComponent(endpoint)}` : API + endpoint;
+      response = await fetchImpl(target, { headers, signal: AbortSignal.timeout(12000), ...(proxyBase && { credentials: 'include' }) });
       if (!isRateLimited(response.status) || retry >= MAX_RETRIES) break;
       onStatus?.(`Rate limited, retrying (${retry + 1}/${MAX_RETRIES})...`);
       await sleepFn(BASE_DELAY_MS * 2 ** retry);
