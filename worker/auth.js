@@ -123,7 +123,7 @@ function configured(env) {
   return Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET && env.WORKER_SECRET);
 }
 
-async function handleLogin(env) {
+async function handleLogin(request, env) {
   const state = randomToken();
   const signedState = await sign(env, { state, exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS });
   const authorize = new URL(GITHUB_AUTHORIZE_URL);
@@ -349,7 +349,7 @@ export default {
     try {
       if (!configured(env)) return url.pathname === '/auth/user' ? json({ authenticated: false }, 401, env) : url.pathname === '/api/github' ? json({ error: 'not_authenticated' }, 401, env) : errorRedirect(env);
       switch (url.pathname) {
-        case '/auth/login': return await handleLogin(env);
+        case '/auth/login': return await handleLogin(request, env);
         case '/auth/callback': return await handleCallback(request, env, url);
         case '/auth/logout': return handleLogout(env);
         case '/auth/user': return await handleUser(request, env);
