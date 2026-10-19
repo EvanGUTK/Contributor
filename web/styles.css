@@ -319,6 +319,11 @@ body.panel-open { overflow: hidden; }
 .bottom-cta p:not(.eyebrow) { color: var(--text-secondary); font-size: 14px; margin: 0; }
 .bottom-cta .btn { white-space: nowrap; }
 
+/* Setup step columns: grid items default to min-width: auto, so long unbroken commands in a <pre>
+   would widen the track past the viewport instead of scrolling inside the code block (#79). */
+.steps { grid-template-columns: minmax(0, 1fr); }
+.steps > *, .codeblock { min-width: 0; max-width: 100%; }
+
 footer { border-top: 1px solid var(--border-subtle); min-height: 88px; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--text-muted); font-size: 12px; }
 .footer-name { font-size: 15px; font-weight: 600; color: var(--text-primary); }
 footer p { margin: 0; }
