@@ -104,34 +104,50 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined, proxy
     return linked;
   }
   /**
+   * Run `lookup` over `keys` at most MAX_PARALLEL_LOOKUPS at a time, keyed results in a Map. A failed lookup is left
+   * out. Past the review deadline, stop waiting and use whatever has arrived; late responses are ignored.
+   */
+  async function lookupBounded(keys, lookup) {
+    const found = new Map();
+    const queue = [...keys];
+    const worker = async () => {
+      for (let key = queue.shift(); key !== undefined; key = queue.shift()) {
+        try { found.set(key, await lookup(key)); } catch { /* unknown: callers treat a missing key as unchecked */ }
+      }
+    };
+    let timer;
+    const deadline = new Promise(resolve => { timer = setTimeout(resolve, reviewLookupDeadlineMs); });
+    try {
+      await Promise.race([Promise.all(Array.from({ length: Math.min(MAX_PARALLEL_LOOKUPS, queue.length) }, worker)), deadline]);
+    } finally { clearTimeout(timer); }
+    queue.length = 0;
+    return new Map(found);
+  }
+  /**
    * Repository records for review results, keyed by "owner/name". GitHub's PR search cannot filter by stars, so the
    * star count comes from the repository itself. One cached lookup per distinct repository, bounded concurrency;
    * a failed lookup means "unknown" (never flagged as low) and never fails discovery.
    */
   async function lookupReviewRepos(reviews, known, warnings) {
-    const found = new Map();
     const names = [...new Set(reviews.map(projectIdFromIssue).filter(name => name && !known.has(name)))];
-    const queue = [...names];
-    const worker = async () => {
-      for (let name = queue.shift(); name; name = queue.shift()) {
-        try { found.set(name, await getRepo(...name.split('/'))); } catch { /* unknown: counted as unchecked below */ }
-      }
-    };
-    // Past the deadline, stop waiting and use whatever has arrived; late responses are ignored.
-    let timer;
-    const deadline = new Promise(resolve => { timer = setTimeout(resolve, reviewLookupDeadlineMs); });
-    try {
-      await Promise.race([Promise.all(Array.from({ length: Math.min(MAX_PARALLEL_LOOKUPS, names.length) }, worker)), deadline]);
-    } finally { clearTimeout(timer); }
-    queue.length = 0;
+    const found = await lookupBounded(names, name => getRepo(...name.split('/')));
     const unchecked = names.length - found.size;
     if (unchecked) warnings.push(`review safety: could not check star counts for ${unchecked} repositor${unchecked === 1 ? 'y' : 'ies'}; verify outside reviews are welcome.`);
-    return new Map(found);
+    return found;
+  }
+  /**
+   * Full pull request records for review results, keyed by the search item. Issue search omits changed_files, which
+   * the size signal needs; a failed or late lookup silently leaves that PR without a size signal.
+   */
+  async function lookupReviewPulls(reviews) {
+    return lookupBounded(reviews.filter(pr => projectIdFromIssue(pr) && Number.isInteger(pr.number)),
+      pr => getPull(...projectIdFromIssue(pr).split('/'), pr.number));
   }
   async function discover(preferences, { limit = 12 } = {}) {
     const p = normalizePreferences(preferences);
     const kinds = p.mode === 'all' ? ['repositories', 'issues', 'reviews'] : [p.mode];
-    // At most four search requests (repositories may try two topic words) plus one cached repository lookup per distinct review repository; no background crawling of arbitrary GitHub repos.
+    // At most four search requests (repositories may try two topic words) plus one cached repository lookup per distinct review repository
+    // and one cached pull request lookup per review result; no background crawling of arbitrary GitHub repos.
     const settled = await Promise.allSettled(kinds.map(kind => search(kind, p, limit)));
     const warnings = [];
     const raw = [];
@@ -142,11 +158,14 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined, proxy
     if (!raw.length && warnings.length) throw new GitHubApiError(warnings.join(' '), 429);
     const repos = new Map(raw.filter(x => x._kind === 'repositories').map(x => [x.full_name, x]));
     const linked = await markLinkedPullRequests(raw.filter(x => x._kind === 'issues' && !x.pull_request), warnings);
-    const reviewRepos = await lookupReviewRepos(raw.filter(x => x._kind === 'reviews'), repos, warnings);
-    const items = raw.map(item => {
+    const reviews = raw.filter(x => x._kind === 'reviews');
+    const [reviewRepos, reviewPulls] = await Promise.all([lookupReviewRepos(reviews, repos, warnings), lookupReviewPulls(reviews)]);
+    const items = raw.map(searched => {
+      const changedFiles = reviewPulls.get(searched)?.changed_files;
+      const item = Number.isFinite(changedFiles) ? { ...searched, changed_files: changedFiles } : searched;
       const repoName = projectIdFromIssue(item);
       const repo = repoName ? repos.get(repoName) ?? reviewRepos.get(repoName) : item._kind === 'repositories' ? item : null;
-      const inProgress = linked.has(item);
+      const inProgress = linked.has(searched);
       const result = scoreOpportunity(item, p, repo, { inProgress });
       if (item._kind !== 'reviews') return { ...item, _repoName: repoName || item.full_name, _inProgress: inProgress, _match: result };
       if (item.draft === true) result.safetyFlags = { ...result.safetyFlags, warnings: [DRAFT_REVIEW_WARNING] };
@@ -160,6 +179,11 @@ export function createGitHubClient({ fetchImpl = fetch, token = undefined, proxy
   async function getRepo(owner, name) {
     for (const part of [owner, name]) if (!/^[\w.-]{1,100}$/.test(part)) throw new Error('Invalid GitHub repository identifier');
     return request(`/repos/${owner}/${name}`);
+  }
+  async function getPull(owner, name, number) {
+    for (const part of [owner, name]) if (!/^[\w.-]{1,100}$/.test(part)) throw new Error('Invalid GitHub repository identifier');
+    if (!Number.isInteger(number) || number < 1) throw new Error('Invalid pull request number');
+    return request(`/repos/${owner}/${name}/pulls/${number}`);
   }
   async function getRepoFiles(owner, name) {
     for (const part of [owner, name]) if (!/^[\w.-]{1,100}$/.test(part)) throw new Error('Invalid GitHub repository identifier');
