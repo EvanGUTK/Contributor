@@ -235,10 +235,12 @@ test('review and repository results trigger no linked PR lookups', async () => {
 });
 
 const reviewPr = (n, repoName) => ({ ...issue(n, repoName), pull_request: {}, body: 'Handles empty input in the tokenizer.' });
-const reviewFetch = ({ prs, stars, calls = [] }) => async url => {
+const reviewFetch = ({ prs, stars, pulls = {}, calls = [] }) => async url => {
   const { pathname } = new URL(url);
   calls.push(pathname);
   if (pathname.startsWith('/search/')) return reply({ items: prs });
+  const pull = /^\/repos\/([\w.-]+\/[\w.-]+)\/pulls\/(\d+)$/.exec(pathname);
+  if (pull) return `${pull[1]}#${pull[2]}` in pulls ? reply({ number: Number(pull[2]), changed_files: pulls[`${pull[1]}#${pull[2]}`] }) : reply({}, { status: 404 });
   const name = pathname.replace('/repos/', '');
   return name in stars ? reply({ full_name: name, stargazers_count: stars[name], pushed_at: new Date().toISOString() }) : reply({}, { status: 404 });
 };
@@ -258,7 +260,49 @@ test('review discovery looks up each distinct repository once', async () => {
   const calls = [];
   const client = createGitHubClient({ fetchImpl: reviewFetch({ prs: [reviewPr(1, 'a/b'), reviewPr(2, 'a/b'), reviewPr(3, 'c/d')], stars: { 'a/b': 100, 'c/d': 100 }, calls }) });
   await client.discover({ mode: 'reviews' });
-  assert.deepEqual(calls.filter(c => c.startsWith('/repos/')).sort(), ['/repos/a/b', '/repos/c/d']);
+  assert.deepEqual(calls.filter(c => c.startsWith('/repos/') && !c.includes('/pulls/')).sort(), ['/repos/a/b', '/repos/c/d']);
+});
+test('review results are enriched from /pulls/{number} so changed_files feeds the size signal', async () => {
+  const calls = [];
+  const prs = [reviewPr(1, 'a/b'), reviewPr(2, 'a/b'), reviewPr(3, 'c/d')];
+  const pulls = { 'a/b#1': 3, 'a/b#2': 450, 'c/d#3': 30 };
+  const client = createGitHubClient({ fetchImpl: reviewFetch({ prs, stars: { 'a/b': 100, 'c/d': 100 }, pulls, calls }) });
+  const { items, warnings } = await client.discover({ mode: 'reviews' });
+  const byNumber = Object.fromEntries(items.map(i => [i.number, i]));
+  assert.deepEqual(calls.filter(c => c.includes('/pulls/')).sort(), ['/repos/a/b/pulls/1', '/repos/a/b/pulls/2', '/repos/c/d/pulls/3']);
+  assert.equal(byNumber[1].changed_files, 3);
+  assert.equal(byNumber[1]._match.breakdown.size, 8);
+  assert.ok(byNumber[1]._match.reasons.includes('Small diff — easy to start reviewing'));
+  assert.equal(byNumber[2]._match.breakdown.size, -5);
+  assert.equal(byNumber[3]._match.breakdown.size, 4);
+  assert.deepEqual(warnings, []);
+});
+test('a failed pull request lookup silently skips the size signal for that PR only', async () => {
+  const prs = [reviewPr(1, 'a/b'), reviewPr(2, 'a/b')];
+  const client = createGitHubClient({ fetchImpl: reviewFetch({ prs, stars: { 'a/b': 100 }, pulls: { 'a/b#2': 5 } }) });
+  const { items, warnings } = await client.discover({ mode: 'reviews' });
+  const byNumber = Object.fromEntries(items.map(i => [i.number, i]));
+  assert.equal(items.length, 2);
+  assert.equal('size' in byNumber[1]._match.breakdown, false);
+  assert.equal('changed_files' in byNumber[1], false);
+  assert.equal(byNumber[2]._match.breakdown.size, 8);
+  assert.deepEqual(warnings, []);
+});
+test('pull request lookups run at most five at a time', async () => {
+  let active = 0;
+  let peak = 0;
+  const client = createGitHubClient({ fetchImpl: async url => {
+    const { pathname } = new URL(url);
+    if (pathname.startsWith('/search/')) return reply({ items: Array.from({ length: 12 }, (_, i) => reviewPr(i + 1, 'a/b')) });
+    if (!pathname.includes('/pulls/')) return reply({ full_name: 'a/b', stargazers_count: 100 });
+    active += 1; peak = Math.max(peak, active);
+    await new Promise(resolve => setImmediate(resolve));
+    active -= 1;
+    return reply({ changed_files: 2 });
+  } });
+  const { items } = await client.discover({ mode: 'reviews' }, { limit: 12 });
+  assert.equal(peak, 5);
+  assert.ok(items.every(i => i._match.breakdown.size === 8));
 });
 test('a failed star lookup is reported as unknown and never flags the review as low-star', async () => {
   const client = createGitHubClient({ fetchImpl: reviewFetch({ prs: [reviewPr(1, 'gone/missing')], stars: {} }) });
