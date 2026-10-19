@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "herdr_link": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "herdr-link"]
+    }
+  }
+}
